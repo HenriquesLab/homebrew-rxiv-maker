@@ -13,13 +13,7 @@ class RxivMaker < Formula
     # Create a virtual environment in libexec
     virtualenv_create(libexec, "python3.12")
     
-    # Install the package using pip
-    system libexec/"bin/pip", "install", "-v", "--no-deps",
-                              "--no-binary", ":all:",
-                              "--ignore-installed",
-                              buildpath
-    
-    # Install dependencies using pip (easier than managing resources)
+    # Install the package directly from PyPI
     system libexec/"bin/pip", "install", "rxiv-maker==#{version}"
 
     # Create wrapper script for the CLI

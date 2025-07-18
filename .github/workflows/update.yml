@@ -83,11 +83,14 @@ jobs:
       - name: Test updated formula
         if: steps.check_version.outputs.update_needed == 'true'
         run: |
+          # Install formula locally first
+          brew install --formula ./Formula/rxiv-maker.rb
+          
           # Validate formula syntax
-          brew audit --strict Formula/rxiv-maker.rb
+          brew audit --strict rxiv-maker
           
           # Test formula parsing
-          brew info --formula Formula/rxiv-maker.rb
+          brew info rxiv-maker
           
           # Verify download URL
           NEW_VERSION="${{ steps.check_version.outputs.new_version }}"

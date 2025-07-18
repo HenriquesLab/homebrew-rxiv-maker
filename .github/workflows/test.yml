@@ -23,13 +23,16 @@ jobs:
         
       - name: Validate formula syntax
         run: |
+          # Install formula locally first
+          brew install --formula ./Formula/rxiv-maker.rb
+          
           # Test formula syntax
-          brew audit --strict --online Formula/rxiv-maker.rb
+          brew audit --strict rxiv-maker
           
       - name: Test formula parsing
         run: |
           # Test that Homebrew can parse the formula
-          brew info --formula Formula/rxiv-maker.rb
+          brew info rxiv-maker
 
   test-homebrew-installation:
     needs: test-formula-syntax
