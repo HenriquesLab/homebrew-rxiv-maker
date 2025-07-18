@@ -10,8 +10,8 @@ class RxivMaker < Formula
   depends_on "python@3.12"
 
   def install
-    # Create virtual environment and install package
-    virtualenv_create(libexec, "python3.12")
+    # Create virtual environment manually  
+    system Formula["python@3.12"].opt_bin/"python3.12", "-m", "venv", libexec
     
     # Install the package with pip in the virtual environment
     system libexec/"bin/python", "-m", "pip", "install", buildpath
