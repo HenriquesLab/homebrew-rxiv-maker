@@ -317,8 +317,15 @@ jobs:
           # Install BasicTeX for testing
           brew install --cask basictex
           
-          # Add LaTeX to PATH
-          export PATH="/usr/local/texlive/2023/bin/universal-darwin:$PATH"
+          # Add LaTeX to PATH - find the most recent version
+          TEXLIVE_YEAR=$(find /usr/local/texlive -maxdepth 1 -type d -name "20*" | sort -V | tail -1 | xargs basename 2>/dev/null)
+          if [ -n "$TEXLIVE_YEAR" ]; then
+            export PATH="/usr/local/texlive/$TEXLIVE_YEAR/bin/universal-darwin:$PATH"
+            echo "Added LaTeX $TEXLIVE_YEAR to PATH"
+          else
+            export PATH="/usr/local/texlive/2023/bin/universal-darwin:$PATH"
+            echo "Using fallback LaTeX 2023 PATH"
+          fi
           
           # Test PDF generation (may fail due to missing packages)
           cd test-manuscript
