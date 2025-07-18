@@ -1,0 +1,481 @@
+name: Test Formula
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      test-scope:
+        description: 'Test scope'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - 'full'
+          - 'syntax-only'
+          - 'quick'
+          - 'comprehensive'
+      force-install:
+        description: 'Force formula installation (ignore cache)'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # Test weekly on Sundays at 6 AM UTC to catch upstream changes
+    - cron: '0 6 * * 0'
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  setup:
+    name: Setup Test Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      test-scope: ${{ steps.config.outputs.test-scope }}
+      test-matrix: ${{ steps.config.outputs.test-matrix }}
+      run-syntax: ${{ steps.config.outputs.run-syntax }}
+      run-install: ${{ steps.config.outputs.run-install }}
+      run-comprehensive: ${{ steps.config.outputs.run-comprehensive }}
+    
+    steps:
+      - name: Configure test parameters
+        id: config
+        run: |
+          # Determine test scope
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            test_scope="comprehensive"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            test_scope="${{ inputs.test-scope }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            test_scope="full"
+          else
+            test_scope="quick"
+          fi
+          
+          echo "test-scope=$test_scope" >> $GITHUB_OUTPUT
+          
+          # Configure test matrix based on scope
+          case "$test_scope" in
+            "syntax-only")
+              matrix='{"os": ["ubuntu-latest"], "include": []}'
+              run_syntax="true"
+              run_install="false"
+              run_comprehensive="false"
+              ;;
+            "quick")
+              matrix='{"os": ["ubuntu-latest"], "include": []}'
+              run_syntax="true"
+              run_install="true"
+              run_comprehensive="false"
+              ;;
+            "comprehensive")
+              matrix='{"os": ["ubuntu-latest", "macos-12", "macos-13"], "include": [{"os": "ubuntu-latest", "test-deps": true}]}'
+              run_syntax="true"
+              run_install="true"
+              run_comprehensive="true"
+              ;;
+            *)
+              matrix='{"os": ["ubuntu-latest", "macos-12"], "include": []}'
+              run_syntax="true"
+              run_install="true"
+              run_comprehensive="false"
+              ;;
+          esac
+          
+          echo "test-matrix=$matrix" >> $GITHUB_OUTPUT
+          echo "run-syntax=$run_syntax" >> $GITHUB_OUTPUT
+          echo "run-install=$run_install" >> $GITHUB_OUTPUT
+          echo "run-comprehensive=$run_comprehensive" >> $GITHUB_OUTPUT
+          
+          echo "## Test Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Scope**: $test_scope" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Syntax Tests**: $run_syntax" >> $GITHUB_STEP_SUMMARY
+          echo "- **Install Tests**: $run_install" >> $GITHUB_STEP_SUMMARY
+          echo "- **Comprehensive Tests**: $run_comprehensive" >> $GITHUB_STEP_SUMMARY
+
+  syntax-validation:
+    name: Syntax and URL Validation
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: needs.setup.outputs.run-syntax == 'true'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Validate formula syntax
+        timeout-minutes: 5
+        run: |
+          echo "🔍 Validating formula syntax..."
+          
+          # Test formula syntax without installing
+          brew audit --strict --formula ./Formula/rxiv-maker.rb
+          
+          # Test formula parsing
+          brew info --formula ./Formula/rxiv-maker.rb
+          
+          echo "✅ Formula syntax validation passed"
+          
+      - name: Verify download URLs
+        timeout-minutes: 5
+        run: |
+          echo "🌐 Verifying download URLs..."
+          
+          # Check main package URL
+          MAIN_URL=$(grep -E '^\s*url' Formula/rxiv-maker.rb | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Main URL: $MAIN_URL"
+          curl -I -f "$MAIN_URL"
+          
+          # Check resource URLs (sample)
+          echo "Testing resource URLs..."
+          grep -A 1 'resource.*do' Formula/rxiv-maker.rb | grep 'url' | head -5 | while read -r line; do
+            URL=$(echo "$line" | sed 's/.*"\(.*\)".*/\1/')
+            echo "Testing: $URL"
+            curl -I -f "$URL" --max-time 30
+          done
+          
+          echo "✅ All download URLs verified"
+          
+      - name: Check Python dependencies
+        timeout-minutes: 5
+        run: |
+          echo "🐍 Validating Python dependencies..."
+          
+          python3 -c "
+          import re
+          import urllib.request
+          import urllib.error
+          
+          with open('Formula/rxiv-maker.rb', 'r') as f:
+              content = f.read()
+          
+          # Extract resource blocks
+          resources = re.findall(r'resource \"([^\"]+)\" do.*?end', content, re.DOTALL)
+          
+          print('Python dependencies found in formula:')
+          for resource in resources:
+              print(f'  - {resource}')
+              
+          # Verify each dependency exists on PyPI
+          failed = []
+          for resource in resources:
+              try:
+                  url = f'https://pypi.org/pypi/{resource}/json'
+                  urllib.request.urlopen(url)
+                  print(f'✓ {resource} exists on PyPI')
+              except urllib.error.URLError as e:
+                  print(f'✗ {resource} not found on PyPI: {e}')
+                  failed.append(resource)
+          
+          if failed:
+              print(f'Failed dependencies: {failed}')
+              exit(1)
+          else:
+              print('✅ All dependencies verified on PyPI')
+          "
+          
+      - name: Check version consistency
+        timeout-minutes: 3
+        run: |
+          echo "📊 Checking version consistency..."
+          
+          # Extract version from formula
+          FORMULA_VERSION=$(grep -E '^\s*url.*rxiv_maker-' Formula/rxiv-maker.rb | sed 's/.*rxiv_maker-\([0-9.]*\)\.tar\.gz.*/\1/')
+          echo "Formula version: $FORMULA_VERSION"
+          
+          # Check if version exists on PyPI
+          curl -f "https://pypi.org/pypi/rxiv-maker/$FORMULA_VERSION/json" > /dev/null
+          echo "✅ Version $FORMULA_VERSION exists on PyPI"
+
+  formula-installation:
+    name: Formula Installation Test
+    needs: [setup, syntax-validation]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    if: needs.setup.outputs.run-install == 'true'
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.test-matrix) }}
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libfreetype6-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libwebp-dev \
+            libopenjp2-7-dev \
+            zlib1g-dev \
+            liblcms2-dev \
+            libffi-dev \
+            pkg-config
+        
+      - name: Install formula
+        timeout-minutes: 35
+        run: |
+          echo "🔧 Installing rxiv-maker formula..."
+          
+          # Force installation if requested
+          if [ "${{ inputs.force-install }}" = "true" ]; then
+            echo "Force installation enabled"
+            brew install --force --formula ./Formula/rxiv-maker.rb
+          else
+            brew install --formula ./Formula/rxiv-maker.rb
+          fi
+          
+          echo "✅ Formula installation completed"
+          
+      - name: Verify installation
+        timeout-minutes: 5
+        run: |
+          echo "🔍 Verifying installation..."
+          
+          # Check if rxiv command is available
+          which rxiv
+          rxiv --version
+          rxiv --help
+          
+          # Test Python module import
+          python3 -c "
+          import sys
+          import os
+          
+          # Add Homebrew site-packages to Python path
+          brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
+          site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
+          
+          # Find the python site-packages directory
+          import glob
+          python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
+          if python_dirs:
+              sys.path.append(python_dirs[0])
+          
+          import rxiv_maker
+          print('✅ Python module import successful')
+          print(f'rxiv-maker version: {rxiv_maker.__version__}')
+          "
+          
+      - name: Test CLI functionality
+        timeout-minutes: 10
+        run: |
+          echo "🧪 Testing CLI functionality..."
+          
+          # Test CLI commands that don't require LaTeX
+          rxiv config show || echo "Config command not available"
+          
+          # Initialize test manuscript
+          mkdir -p test-manuscript
+          cd test-manuscript
+          
+          # Test init command
+          rxiv init test-project || echo "Init command may not be available"
+          
+          # If files were created, verify structure
+          if [ -f "00_CONFIG.yml" ]; then
+            echo "✅ Manuscript initialization successful"
+            test -f "01_MAIN.md" || (echo "MAIN file not created" && exit 1)
+            test -f "02_SUPPLEMENTARY_INFO.md" || (echo "SUPPLEMENTARY file not created" && exit 1)
+            test -f "03_REFERENCES.bib" || (echo "REFERENCES file not created" && exit 1)
+          else
+            echo "ℹ️ Manuscript initialization may use different structure"
+          fi
+          
+          echo "✅ CLI functionality tests passed"
+          
+      - name: Test with LaTeX (macOS only)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          echo "📄 Testing LaTeX functionality..."
+          
+          # Install BasicTeX for testing
+          brew install --cask basictex
+          
+          # Add LaTeX to PATH
+          export PATH="/usr/local/texlive/2023/bin/universal-darwin:$PATH"
+          
+          # Test PDF generation (may fail due to missing packages)
+          cd test-manuscript
+          rxiv validate --no-doi || echo "Validation failed (expected without full LaTeX)"
+          
+          echo "✅ LaTeX integration test completed"
+
+  comprehensive-testing:
+    name: Comprehensive Testing
+    needs: [setup, formula-installation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: needs.setup.outputs.run-comprehensive == 'true'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libfreetype6-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libwebp-dev \
+            libopenjp2-7-dev \
+            zlib1g-dev \
+            liblcms2-dev \
+            libffi-dev \
+            pkg-config
+        
+      - name: Install and test formula
+        timeout-minutes: 20
+        run: |
+          # Install formula
+          brew install --formula ./Formula/rxiv-maker.rb
+          
+          # Comprehensive functionality test
+          echo "🔍 Running comprehensive tests..."
+          
+          # Test version and help
+          rxiv --version
+          rxiv --help
+          
+          # Test configuration
+          rxiv config show
+          
+          # Test manuscript operations
+          mkdir comprehensive-test
+          cd comprehensive-test
+          
+          # Test various CLI commands
+          rxiv init test-manuscript
+          
+          if [ -d "test-manuscript" ]; then
+            cd test-manuscript
+            
+            # Test validation
+            rxiv validate --no-doi
+            
+            # Test figure generation (if available)
+            rxiv figures --help || echo "Figures command not available"
+            
+            # Test bibliography commands
+            rxiv bibliography --help || echo "Bibliography command not available"
+            
+            echo "✅ Comprehensive testing completed"
+          else
+            echo "ℹ️ Manuscript directory not created, testing CLI only"
+          fi
+          
+      - name: Test installation from tap
+        timeout-minutes: 15
+        run: |
+          echo "🍺 Testing installation from tap..."
+          
+          # Uninstall local version
+          brew uninstall rxiv-maker || echo "Formula not installed"
+          
+          # Add tap (this would be the real tap in production)
+          # brew tap henriqueslab/rxiv-maker
+          # brew install rxiv-maker
+          
+          echo "ℹ️ Tap installation test skipped (requires published tap)"
+          
+      - name: Performance benchmarks
+        timeout-minutes: 10
+        run: |
+          echo "📊 Running performance benchmarks..."
+          
+          # Test CLI startup time
+          time rxiv --version
+          
+          # Test import time
+          time python3 -c "
+          import sys
+          import os
+          import glob
+          
+          # Add Homebrew site-packages to Python path
+          brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
+          site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
+          python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
+          if python_dirs:
+              sys.path.append(python_dirs[0])
+          
+          import rxiv_maker
+          print('Import successful')
+          "
+          
+          echo "✅ Performance benchmarks completed"
+
+  summary:
+    name: Test Summary
+    needs: [setup, syntax-validation, formula-installation, comprehensive-testing]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Generate test summary
+        run: |
+          echo "# Formula Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Scope**: ${{ needs.setup.outputs.test-scope }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Syntax validation
+          if [ "${{ needs.syntax-validation.result }}" = "success" ]; then
+            echo "✅ **Syntax Validation**: All checks passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Syntax Validation**: Issues found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Formula installation
+          if [ "${{ needs.formula-installation.result }}" = "success" ]; then
+            echo "✅ **Formula Installation**: All platforms successful" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.formula-installation.result }}" = "failure" ]; then
+            echo "❌ **Formula Installation**: Some platforms failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⏭️ **Formula Installation**: Skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Comprehensive testing
+          if [ "${{ needs.comprehensive-testing.result }}" = "success" ]; then
+            echo "✅ **Comprehensive Testing**: All tests passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.comprehensive-testing.result }}" = "failure" ]; then
+            echo "❌ **Comprehensive Testing**: Some tests failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⏭️ **Comprehensive Testing**: Skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Result**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY

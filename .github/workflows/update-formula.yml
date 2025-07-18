@@ -1,0 +1,484 @@
+name: Update Formula
+
+on:
+  schedule:
+    # Check for updates daily at 6 AM UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      target-version:
+        description: 'Target version to update to (leave empty for latest)'
+        required: false
+        default: ''
+        type: string
+      force-update:
+        description: 'Force update even if version is same'
+        required: false
+        default: false
+        type: boolean
+      skip-pr:
+        description: 'Skip PR creation and commit directly'
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      target-version:
+        description: 'Target version to update to'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  check-updates:
+    name: Check for Updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      update-needed: ${{ steps.check_version.outputs.update_needed }}
+      current-version: ${{ steps.check_version.outputs.current_version }}
+      target-version: ${{ steps.check_version.outputs.target_version }}
+      has-changes: ${{ steps.check_version.outputs.has_changes }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Check for new version
+        id: check_version
+        timeout-minutes: 5
+        run: |
+          echo "🔍 Checking for version updates..."
+          
+          # Get current version from formula
+          CURRENT_VERSION=$(grep -E '^\s*url.*rxiv_maker-' Formula/rxiv-maker.rb | sed 's/.*rxiv_maker-\([0-9.]*\)\.tar\.gz.*/\1/')
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Determine target version
+          if [ -n "${{ inputs.target-version }}" ]; then
+            TARGET_VERSION="${{ inputs.target-version }}"
+            echo "Target version (manual): $TARGET_VERSION"
+          else
+            # Get latest version from PyPI
+            TARGET_VERSION=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "
+            import sys, json
+            try:
+                data = json.load(sys.stdin)
+                print(data['info']['version'])
+            except:
+                print('error')
+            ")
+            
+            if [ "$TARGET_VERSION" = "error" ]; then
+              echo "❌ Failed to fetch latest version from PyPI"
+              exit 1
+            fi
+            
+            echo "Target version (latest): $TARGET_VERSION"
+          fi
+          
+          # Set outputs
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "target_version=$TARGET_VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if update is needed
+          if [ "$CURRENT_VERSION" != "$TARGET_VERSION" ]; then
+            echo "✅ Update needed: $CURRENT_VERSION → $TARGET_VERSION"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.force-update }}" = "true" ]; then
+            echo "⚠️ Force update enabled for version $TARGET_VERSION"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ No update needed (current: $CURRENT_VERSION)"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Verify target version exists
+        if: steps.check_version.outputs.update_needed == 'true'
+        timeout-minutes: 3
+        run: |
+          TARGET_VERSION="${{ steps.check_version.outputs.target_version }}"
+          echo "🔍 Verifying target version $TARGET_VERSION exists on PyPI..."
+          
+          # Check if version exists on PyPI
+          if curl -f "https://pypi.org/pypi/rxiv-maker/$TARGET_VERSION/json" > /dev/null; then
+            echo "✅ Version $TARGET_VERSION exists on PyPI"
+          else
+            echo "❌ Version $TARGET_VERSION not found on PyPI"
+            exit 1
+          fi
+
+  update-formula:
+    name: Update Formula
+    needs: check-updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: needs.check-updates.outputs.update-needed == 'true'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libfreetype6-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libwebp-dev \
+            libopenjp2-7-dev \
+            zlib1g-dev \
+            liblcms2-dev \
+            libffi-dev \
+            pkg-config
+        
+      - name: Update main package
+        timeout-minutes: 10
+        run: |
+          TARGET_VERSION="${{ needs.check-updates.outputs.target-version }}"
+          echo "🔄 Updating main package to version $TARGET_VERSION..."
+          
+          # Get SHA256 hash from PyPI
+          echo "Fetching SHA256 hash for version $TARGET_VERSION..."
+          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              for file_info in data['releases']['$TARGET_VERSION']:
+                  if file_info['packagetype'] == 'sdist':
+                      print(file_info['digests']['sha256'])
+                      break
+              else:
+                  print('error')
+          except:
+              print('error')
+          ")
+          
+          if [ "$SHA256" = "error" ]; then
+            echo "❌ Failed to fetch SHA256 hash"
+            exit 1
+          fi
+          
+          echo "New SHA256: $SHA256"
+          
+          # Update formula using sed
+          echo "Updating formula file..."
+          cp Formula/rxiv-maker.rb Formula/rxiv-maker.rb.bak
+          
+          sed -i "s|rxiv_maker-[0-9.]*\.tar\.gz|rxiv_maker-$TARGET_VERSION.tar.gz|g" Formula/rxiv-maker.rb
+          sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"$SHA256\"|g" Formula/rxiv-maker.rb
+          
+          echo "✅ Main package updated"
+          
+      - name: Update dependencies
+        timeout-minutes: 10
+        run: |
+          TARGET_VERSION="${{ needs.check-updates.outputs.target-version }}"
+          echo "🔄 Checking for dependency updates..."
+          
+          # Get current dependencies from PyPI for the target version
+          DEPS_JSON=$(curl -s "https://pypi.org/pypi/rxiv-maker/$TARGET_VERSION/json" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              info = data['info']
+              requires_dist = info.get('requires_dist', [])
+              
+              # Extract actual dependencies (not extras)
+              deps = []
+              for req in requires_dist:
+                  if req and not ('extra ==' in req or 'python_version' in req):
+                      # Extract package name (before any version specifiers)
+                      pkg_name = req.split(' ')[0].split('>=')[0].split('==')[0].split('!=')[0].split('>')[0].split('<')[0].split('~')[0]
+                      if pkg_name:
+                          deps.append(pkg_name)
+              
+              print(json.dumps(deps))
+          except:
+              print('[]')
+          ")
+          
+          echo "Current dependencies from PyPI: $DEPS_JSON"
+          
+          # For now, we'll keep the existing resource approach
+          # In a full implementation, we'd update all resource SHA256s here
+          echo "ℹ️ Dependency SHA256 updates require manual review"
+          echo "The formula maintainer should verify and update resource checksums"
+          
+      - name: Validate updated formula
+        timeout-minutes: 15
+        run: |
+          echo "🔍 Validating updated formula..."
+          
+          # Test formula syntax
+          brew audit --strict --formula ./Formula/rxiv-maker.rb
+          
+          # Test formula parsing
+          brew info --formula ./Formula/rxiv-maker.rb
+          
+          # Verify download URL
+          TARGET_VERSION="${{ needs.check-updates.outputs.target-version }}"
+          URL="https://files.pythonhosted.org/packages/source/r/rxiv-maker/rxiv_maker-$TARGET_VERSION.tar.gz"
+          echo "Verifying download URL: $URL"
+          curl -I -f "$URL"
+          
+          echo "✅ Formula validation passed"
+          
+      - name: Test updated formula
+        timeout-minutes: 15
+        run: |
+          echo "🧪 Testing updated formula..."
+          
+          # Install the updated formula
+          brew install --formula ./Formula/rxiv-maker.rb
+          
+          # Test basic functionality
+          which rxiv
+          rxiv --version
+          rxiv --help
+          
+          # Test Python module import
+          python3 -c "
+          import sys
+          import os
+          import glob
+          
+          # Add Homebrew site-packages to Python path
+          brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
+          site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
+          python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
+          if python_dirs:
+              sys.path.append(python_dirs[0])
+          
+          import rxiv_maker
+          print(f'✅ Import successful, version: {rxiv_maker.__version__}')
+          "
+          
+          echo "✅ Formula testing passed"
+
+  create-pull-request:
+    name: Create Pull Request
+    needs: [check-updates, update-formula]
+    runs-on: ubuntu-latest
+    if: needs.check-updates.outputs.update-needed == 'true' && inputs.skip-pr != true
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Apply formula updates
+        run: |
+          TARGET_VERSION="${{ needs.check-updates.outputs.target-version }}"
+          
+          # Re-apply the same updates (since we're in a clean checkout)
+          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              for file_info in data['releases']['$TARGET_VERSION']:
+                  if file_info['packagetype'] == 'sdist':
+                      print(file_info['digests']['sha256'])
+                      break
+          except:
+              print('error')
+          ")
+          
+          sed -i "s|rxiv_maker-[0-9.]*\.tar\.gz|rxiv_maker-$TARGET_VERSION.tar.gz|g" Formula/rxiv-maker.rb
+          sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"$SHA256\"|g" Formula/rxiv-maker.rb
+          
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update rxiv-maker to version ${{ needs.check-updates.outputs.target-version }}"
+          title: "Auto-update: rxiv-maker ${{ needs.check-updates.outputs.current-version }} → ${{ needs.check-updates.outputs.target-version }}"
+          body: |
+            ## 🔄 Auto-update from PyPI
+            
+            **Previous version:** `${{ needs.check-updates.outputs.current-version }}`
+            **New version:** `${{ needs.check-updates.outputs.target-version }}`
+            
+            ### ✅ Automated Changes
+            - [x] Updated version number in formula
+            - [x] Updated download URL
+            - [x] Updated main package SHA256 checksum
+            - [x] Formula syntax validation passed
+            - [x] Download URL verified
+            - [x] Basic functionality tested
+            
+            ### 🔍 Manual Review Required
+            - [ ] Review Python dependency versions
+            - [ ] Update resource SHA256s if needed
+            - [ ] Test installation on macOS
+            - [ ] Verify advanced CLI functionality
+            - [ ] Check for breaking changes
+            
+            ### 📋 Verification Completed
+            - [x] Formula syntax validated with `brew audit`
+            - [x] Download URL verified with HTTP request
+            - [x] Basic CLI functionality tested
+            - [x] Python module import tested
+            
+            ### 🔗 References
+            - **PyPI Release**: https://pypi.org/project/rxiv-maker/${{ needs.check-updates.outputs.target-version }}/
+            - **GitHub Release**: https://github.com/henriqueslab/rxiv-maker/releases/tag/v${{ needs.check-updates.outputs.target-version }}
+            - **Changelog**: https://github.com/henriqueslab/rxiv-maker/blob/main/CHANGELOG.md
+            
+            ### 📊 Impact Assessment
+            - **Breaking Changes**: Review required
+            - **New Dependencies**: Check resources section
+            - **Compatibility**: Tested on Ubuntu Linux
+            
+            ---
+            
+            🤖 This PR was automatically created by the update-formula workflow.
+            🔍 Manual review and testing recommended before merging.
+            
+            **Merge checklist:**
+            - [ ] Dependencies reviewed and updated
+            - [ ] macOS installation tested
+            - [ ] Advanced functionality verified
+            - [ ] No breaking changes confirmed
+          branch: auto-update-${{ needs.check-updates.outputs.target-version }}
+          delete-branch: true
+          labels: |
+            auto-update
+            dependencies
+            review-required
+          assignees: |
+            ${{ github.repository_owner }}
+
+  direct-commit:
+    name: Direct Commit
+    needs: [check-updates, update-formula]
+    runs-on: ubuntu-latest
+    if: needs.check-updates.outputs.update-needed == 'true' && inputs.skip-pr == true
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Apply formula updates
+        run: |
+          TARGET_VERSION="${{ needs.check-updates.outputs.target-version }}"
+          
+          # Re-apply the same updates
+          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "
+          import sys, json
+          try:
+              data = json.load(sys.stdin)
+              for file_info in data['releases']['$TARGET_VERSION']:
+                  if file_info['packagetype'] == 'sdist':
+                      print(file_info['digests']['sha256'])
+                      break
+          except:
+              print('error')
+          ")
+          
+          sed -i "s|rxiv_maker-[0-9.]*\.tar\.gz|rxiv_maker-$TARGET_VERSION.tar.gz|g" Formula/rxiv-maker.rb
+          sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"$SHA256\"|g" Formula/rxiv-maker.rb
+          
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add Formula/rxiv-maker.rb
+          git commit -m "Update rxiv-maker to version ${{ needs.check-updates.outputs.target-version }}
+
+          - Updated version from ${{ needs.check-updates.outputs.current-version }} to ${{ needs.check-updates.outputs.target-version }}
+          - Updated download URL and SHA256 checksum
+          - Formula syntax validated
+          - Basic functionality tested
+          
+          Auto-updated by update-formula workflow"
+          
+          git push origin main
+
+  notify-completion:
+    name: Notify Completion
+    needs: [check-updates, update-formula, create-pull-request, direct-commit]
+    runs-on: ubuntu-latest
+    if: always() && needs.check-updates.outputs.update-needed == 'true'
+    
+    steps:
+      - name: Create update summary
+        run: |
+          echo "# Formula Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Current Version**: ${{ needs.check-updates.outputs.current-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Version**: ${{ needs.check-updates.outputs.target-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Update status
+          if [ "${{ needs.update-formula.result }}" = "success" ]; then
+            echo "✅ **Formula Update**: Successfully updated and tested" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Formula Update**: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # PR/Commit status
+          if [ "${{ inputs.skip-pr }}" = "true" ]; then
+            if [ "${{ needs.direct-commit.result }}" = "success" ]; then
+              echo "✅ **Direct Commit**: Changes committed to main branch" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **Direct Commit**: Failed to commit changes" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            if [ "${{ needs.create-pull-request.result }}" = "success" ]; then
+              echo "✅ **Pull Request**: Created for manual review" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ **Pull Request**: Failed to create PR" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Steps**: $(if [ "${{ inputs.skip-pr }}" = "true" ]; then echo "Changes committed directly"; else echo "Review and merge the pull request"; fi)" >> $GITHUB_STEP_SUMMARY
+
+  no-update-needed:
+    name: No Update Required
+    needs: check-updates
+    runs-on: ubuntu-latest
+    if: needs.check-updates.outputs.update-needed == 'false'
+    
+    steps:
+      - name: Log no update needed
+        run: |
+          echo "# No Update Required" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Current Version**: ${{ needs.check-updates.outputs.current-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Latest Version**: ${{ needs.check-updates.outputs.target-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: Formula is up to date" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "ℹ️ No action required. The formula is already at the latest version." >> $GITHUB_STEP_SUMMARY
