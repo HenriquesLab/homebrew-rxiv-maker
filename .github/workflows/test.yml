@@ -1,0 +1,139 @@
+name: Test Homebrew Installation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Test weekly to catch PyPI updates
+    - cron: '0 6 * * 1'
+
+jobs:
+  test-formula-syntax:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Validate formula syntax
+        run: |
+          # Test formula syntax
+          brew audit --strict --online Formula/rxiv-maker.rb
+          
+      - name: Test formula parsing
+        run: |
+          # Test that Homebrew can parse the formula
+          brew info --formula Formula/rxiv-maker.rb
+
+  test-homebrew-installation:
+    needs: test-formula-syntax
+    strategy:
+      matrix:
+        os: [macos-12, macos-13, macos-14, ubuntu-20.04, ubuntu-22.04]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Install formula
+        run: |
+          # Install from local formula
+          brew install --formula ./Formula/rxiv-maker.rb
+          
+      - name: Verify installation
+        run: |
+          # Check if rxiv command is available
+          rxiv --version
+          rxiv --help
+          
+          # Test Python import
+          python3 -c "import sys; sys.path.append('$(brew --prefix rxiv-maker)/libexec/lib/python*/site-packages'); import rxiv_maker; print('Import successful')"
+          
+      - name: Test basic CLI functionality
+        run: |
+          # Test CLI commands that don't require LaTeX
+          rxiv config show
+          
+          # Initialize test manuscript
+          mkdir test-manuscript
+          cd test-manuscript
+          rxiv init
+          
+          # Verify manuscript structure
+          test -f "00_CONFIG.yml" || (echo "CONFIG file not created" && exit 1)
+          test -f "01_MAIN.md" || (echo "MAIN file not created" && exit 1)
+          test -f "02_SUPPLEMENTARY_INFO.md" || (echo "SUPPLEMENTARY file not created" && exit 1)
+          test -f "03_REFERENCES.bib" || (echo "REFERENCES file not created" && exit 1)
+          
+      - name: Test with LaTeX (macOS only)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          # Install BasicTeX for testing
+          brew install --cask basictex
+          
+          # Add LaTeX to PATH
+          export PATH="/usr/local/texlive/2023/bin/universal-darwin:$PATH"
+          
+          # Test PDF generation (may fail due to missing packages)
+          cd test-manuscript
+          rxiv validate || echo "Validation failed (expected without full LaTeX)"
+
+  test-formula-dependencies:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Check Python dependencies
+        run: |
+          # Extract and verify all Python dependencies from formula
+          python3 -c "
+          import re
+          
+          with open('Formula/rxiv-maker.rb', 'r') as f:
+              content = f.read()
+          
+          # Extract resource blocks
+          resources = re.findall(r'resource \"([^\"]+)\" do.*?end', content, re.DOTALL)
+          
+          print('Python dependencies found in formula:')
+          for resource in resources:
+              print(f'  - {resource}')
+              
+          # Verify each dependency exists on PyPI
+          import urllib.request
+          import json
+          
+          for resource in resources:
+              try:
+                  url = f'https://pypi.org/pypi/{resource}/json'
+                  urllib.request.urlopen(url)
+                  print(f'✓ {resource} exists on PyPI')
+              except:
+                  print(f'✗ {resource} not found on PyPI')
+                  exit(1)
+          "
+          
+      - name: Check version consistency
+        run: |
+          # Extract version from formula
+          FORMULA_VERSION=$(grep -E '^\s*url.*rxiv_maker-' Formula/rxiv-maker.rb | sed 's/.*rxiv_maker-\([0-9.]*\)\.tar\.gz.*/\1/')
+          echo "Formula version: $FORMULA_VERSION"
+          
+          # Check if version exists on PyPI
+          curl -f "https://pypi.org/pypi/rxiv-maker/$FORMULA_VERSION/json" > /dev/null
+          echo "Version $FORMULA_VERSION exists on PyPI"

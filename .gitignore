@@ -1,0 +1,19 @@
+# Homebrew specific
+*.bottle.*
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Testing
+.brew_tests/
