@@ -10,6 +10,7 @@ on:
 jobs:
   update-formula:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
       - name: Checkout repository
@@ -23,6 +24,7 @@ jobs:
           
       - name: Check for new version
         id: check_version
+        timeout-minutes: 5
         run: |
           # Get current version from formula
           CURRENT_VERSION=$(grep -E '^\s*url.*rxiv_maker-' Formula/rxiv-maker.rb | sed 's/.*rxiv_maker-\([0-9.]*\)\.tar\.gz.*/\1/')
@@ -45,6 +47,7 @@ jobs:
           
       - name: Update formula
         if: steps.check_version.outputs.update_needed == 'true'
+        timeout-minutes: 5
         run: |
           NEW_VERSION="${{ steps.check_version.outputs.new_version }}"
           
@@ -70,6 +73,7 @@ jobs:
           
       - name: Update Python dependencies
         if: steps.check_version.outputs.update_needed == 'true'
+        timeout-minutes: 5
         run: |
           NEW_VERSION="${{ steps.check_version.outputs.new_version }}"
           
@@ -82,15 +86,28 @@ jobs:
           
       - name: Test updated formula
         if: steps.check_version.outputs.update_needed == 'true'
+        timeout-minutes: 15
         run: |
-          # Install formula locally first
-          brew install --formula ./Formula/rxiv-maker.rb
+          # Install system dependencies for compilation
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libfreetype6-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libwebp-dev \
+            libopenjp2-7-dev \
+            zlib1g-dev \
+            liblcms2-dev \
+            libffi-dev \
+            pkg-config
           
-          # Validate formula syntax
-          brew audit --strict rxiv-maker
+          # Validate formula syntax without installing
+          brew audit --strict --formula ./Formula/rxiv-maker.rb
           
           # Test formula parsing
-          brew info rxiv-maker
+          brew info --formula ./Formula/rxiv-maker.rb
           
           # Verify download URL
           NEW_VERSION="${{ steps.check_version.outputs.new_version }}"
@@ -100,6 +117,7 @@ jobs:
           
       - name: Create Pull Request
         if: steps.check_version.outputs.update_needed == 'true'
+        timeout-minutes: 5
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,105 @@
+name: Quick Formula Test
+
+on:
+  workflow_dispatch:
+    # Allow manual triggering for testing
+  push:
+    paths:
+      - 'Formula/rxiv-maker.rb'
+      - '.github/workflows/test.yml'
+      - '.github/workflows/quick-test.yml'
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Quick syntax validation
+        timeout-minutes: 5
+        run: |
+          echo "Testing formula syntax..."
+          
+          # Test formula syntax without installing
+          brew audit --strict --formula ./Formula/rxiv-maker.rb
+          
+          # Test formula parsing
+          brew info --formula ./Formula/rxiv-maker.rb
+          
+          # Verify download URLs exist
+          MAIN_URL=$(grep -E '^\s*url' Formula/rxiv-maker.rb | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "Main URL: $MAIN_URL"
+          curl -I -f "$MAIN_URL"
+          
+          # Test a few resource URLs
+          echo "Testing resource URLs..."
+          grep -A 1 'resource.*do' Formula/rxiv-maker.rb | grep 'url' | head -3 | while read -r line; do
+            URL=$(echo "$line" | sed 's/.*"\(.*\)".*/\1/')
+            echo "Testing: $URL"
+            curl -I -f "$URL"
+          done
+          
+          echo "✅ All syntax checks passed!"
+          
+  dependency-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Verify Python dependencies
+        timeout-minutes: 5
+        run: |
+          # Extract and verify all Python dependencies from formula
+          python3 -c "
+          import re
+          import urllib.request
+          import urllib.error
+          
+          with open('Formula/rxiv-maker.rb', 'r') as f:
+              content = f.read()
+          
+          # Extract resource blocks
+          resources = re.findall(r'resource \"([^\"]+)\" do.*?end', content, re.DOTALL)
+          
+          print('Python dependencies found in formula:')
+          for resource in resources:
+              print(f'  - {resource}')
+              
+          # Verify each dependency exists on PyPI
+          failed = []
+          for resource in resources:
+              try:
+                  url = f'https://pypi.org/pypi/{resource}/json'
+                  urllib.request.urlopen(url)
+                  print(f'✓ {resource} exists on PyPI')
+              except urllib.error.URLError as e:
+                  print(f'✗ {resource} not found on PyPI: {e}')
+                  failed.append(resource)
+          
+          if failed:
+              print(f'Failed dependencies: {failed}')
+              exit(1)
+          else:
+              print('✅ All dependencies verified on PyPI')
+          "
+          
+      - name: Check version consistency
+        timeout-minutes: 3
+        run: |
+          # Extract version from formula
+          FORMULA_VERSION=$(grep -E '^\s*url.*rxiv_maker-' Formula/rxiv-maker.rb | sed 's/.*rxiv_maker-\([0-9.]*\)\.tar\.gz.*/\1/')
+          echo "Formula version: $FORMULA_VERSION"
+          
+          # Check if version exists on PyPI
+          curl -f "https://pypi.org/pypi/rxiv-maker/$FORMULA_VERSION/json" > /dev/null
+          echo "✅ Version $FORMULA_VERSION exists on PyPI"

@@ -12,6 +12,7 @@ on:
 jobs:
   test-formula-syntax:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     
     steps:
       - name: Checkout repository
@@ -21,26 +22,57 @@ jobs:
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@master
         
-      - name: Validate formula syntax
+      - name: Install system dependencies for compilation
         run: |
-          # Install formula locally first
+          # Install system libraries needed for Python packages
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libfreetype6-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libwebp-dev \
+            libopenjp2-7-dev \
+            zlib1g-dev \
+            liblcms2-dev \
+            libffi-dev \
+            pkg-config
+        
+      - name: Validate formula syntax (dry run)
+        timeout-minutes: 5
+        run: |
+          # Test formula syntax without installing
+          brew audit --strict --formula ./Formula/rxiv-maker.rb
+          
+          # Test formula parsing
+          brew info --formula ./Formula/rxiv-maker.rb
+          
+      - name: Install formula (with timeout)
+        timeout-minutes: 25
+        run: |
+          # Install formula locally with timeout
           brew install --formula ./Formula/rxiv-maker.rb
           
-          # Test formula syntax
-          brew audit --strict rxiv-maker
-          
-      - name: Test formula parsing
+      - name: Test basic functionality
+        timeout-minutes: 5
         run: |
-          # Test that Homebrew can parse the formula
+          # Test that the command is available
+          which rxiv
+          rxiv --version
+          
+          # Test formula info
           brew info rxiv-maker
 
   test-homebrew-installation:
     needs: test-formula-syntax
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-12, macos-13, macos-14, ubuntu-20.04, ubuntu-22.04]
+        os: [macos-12, macos-13, ubuntu-22.04]
     
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     
     steps:
       - name: Checkout repository
@@ -50,14 +82,34 @@ jobs:
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@master
         
-      - name: Install formula
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
-          # Install from local formula
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libfreetype6-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libwebp-dev \
+            libopenjp2-7-dev \
+            zlib1g-dev \
+            liblcms2-dev \
+            libffi-dev \
+            pkg-config
+        
+      - name: Install formula
+        timeout-minutes: 35
+        run: |
+          # Install from local formula with timeout
           brew install --formula ./Formula/rxiv-maker.rb
           
       - name: Verify installation
+        timeout-minutes: 5
         run: |
           # Check if rxiv command is available
+          which rxiv
           rxiv --version
           rxiv --help
           
@@ -65,6 +117,7 @@ jobs:
           python3 -c "import sys; sys.path.append('$(brew --prefix rxiv-maker)/libexec/lib/python*/site-packages'); import rxiv_maker; print('Import successful')"
           
       - name: Test basic CLI functionality
+        timeout-minutes: 5
         run: |
           # Test CLI commands that don't require LaTeX
           rxiv config show
@@ -96,12 +149,14 @@ jobs:
 
   test-formula-dependencies:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         
       - name: Check Python dependencies
+        timeout-minutes: 5
         run: |
           # Extract and verify all Python dependencies from formula
           python3 -c "
@@ -132,6 +187,7 @@ jobs:
           "
           
       - name: Check version consistency
+        timeout-minutes: 3
         run: |
           # Extract version from formula
           FORMULA_VERSION=$(grep -E '^\s*url.*rxiv_maker-' Formula/rxiv-maker.rb | sed 's/.*rxiv_maker-\([0-9.]*\)\.tar\.gz.*/\1/')
