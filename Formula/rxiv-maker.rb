@@ -39,7 +39,7 @@ class RxivMaker < Formula
 
   test do
     # Test that the CLI is working
-    assert_match "rxiv-maker", shell_output("#{bin}/rxiv --version")
+    assert_match "version", shell_output("#{bin}/rxiv --version")
     
     # Test basic functionality
     system bin/"rxiv", "--help"
