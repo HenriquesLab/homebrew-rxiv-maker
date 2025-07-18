@@ -13,8 +13,8 @@ class RxivMaker < Formula
     # Create virtual environment and install package
     virtualenv_create(libexec, "python3.12")
     
-    # Install the package with pip
-    system libexec/"bin/pip", "install", buildpath
+    # Install the package with pip in the virtual environment
+    system libexec/"bin/python", "-m", "pip", "install", buildpath
     
     # Create wrapper script for the CLI
     (bin/"rxiv").write_env_script(libexec/"bin/python", "-m", "rxiv_maker.cli")
