@@ -10,11 +10,8 @@ class RxivMaker < Formula
   depends_on "python@3.12"
 
   def install
-    # Create a virtual environment in libexec
-    virtualenv_create(libexec, "python3.12")
-    
-    # Install the package directly from PyPI
-    system libexec/"bin/pip", "install", "rxiv-maker==#{version}"
+    # Install using virtualenv_install_with_resources (the standard way)
+    virtualenv_install_with_resources
 
     # Create wrapper script for the CLI
     (bin/"rxiv").write_env_script(libexec/"bin/python", "-m", "rxiv_maker.cli")
