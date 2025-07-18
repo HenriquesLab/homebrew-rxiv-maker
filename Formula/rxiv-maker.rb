@@ -7,7 +7,8 @@ class RxivMaker < Formula
   sha256 "15d9e9fbc1ad0ca42b6c64d487088fdaa0f365c3884781b918bf56af8787a2ed"
   license "MIT"
 
-  depends_on "python@3.11"
+  depends_on "libyaml" 
+  depends_on "python"
 
   resource "click" do
     url "https://files.pythonhosted.org/packages/60/6c/8ca2efa64cf75a977a0d7fac081354553ebe483345c734fb6b6515d96bbc/click-8.2.1.tar.gz"
