@@ -10,9 +10,12 @@ class RxivMaker < Formula
   depends_on "python@3.12"
 
   def install
-    # Install using virtualenv_install_with_resources (the standard way)
-    virtualenv_install_with_resources
-
+    # Create virtual environment and install package
+    virtualenv_create(libexec, "python3.12")
+    
+    # Install the package with pip
+    system libexec/"bin/pip", "install", buildpath
+    
     # Create wrapper script for the CLI
     (bin/"rxiv").write_env_script(libexec/"bin/python", "-m", "rxiv_maker.cli")
   end
@@ -43,8 +46,5 @@ class RxivMaker < Formula
     
     # Test basic functionality
     system bin/"rxiv", "--help"
-    
-    # Test Python import
-    system libexec/"bin/python", "-c", "import rxiv_maker; print('Import successful')"
   end
 end
