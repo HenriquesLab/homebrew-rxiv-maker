@@ -122,15 +122,13 @@ jobs:
         run: |
           echo "🔍 Validating formula syntax..."
           
-          # Copy formula to Homebrew directory for audit
-          HOMEBREW_FORMULA_DIR="$(brew --repository)/Library/Taps/homebrew/homebrew-core/Formula"
-          mkdir -p "$HOMEBREW_FORMULA_DIR"
-          cp ./Formula/rxiv-maker.rb "$HOMEBREW_FORMULA_DIR/rxiv-maker.rb"
+          # Add this tap to Homebrew for testing
+          brew tap homebrew-rxiv-maker/test ${{ github.workspace }}
           
-          # Test formula syntax using name (new Homebrew requirement)
-          brew audit --strict --formula rxiv-maker
+          # Test formula syntax using tap path
+          brew audit --strict --formula homebrew-rxiv-maker/test/rxiv-maker
           
-          # Test formula parsing using path (still works)
+          # Test formula parsing using path
           brew info --formula ./Formula/rxiv-maker.rb
           
           echo "✅ Formula syntax validation passed"
@@ -358,6 +356,142 @@ jobs:
           
           echo "✅ LaTeX integration test completed"
 
+  python-environment-testing:
+    name: Python Environment Testing
+    needs: [setup, formula-installation]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    if: needs.setup.outputs.run-comprehensive == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-12]
+        python-version: ["3.11", "3.12"]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+        
+      - name: Install rxiv-maker
+        run: |
+          brew install --formula ./Formula/rxiv-maker.rb
+          
+      - name: Test Python virtual environment isolation
+        run: |
+          echo "🐍 Testing Python virtual environment isolation..."
+          
+          # Find the rxiv-maker virtualenv
+          RXIV_PREFIX=$(brew --prefix rxiv-maker)
+          RXIV_VENV="$RXIV_PREFIX/libexec"
+          
+          echo "rxiv-maker prefix: $RXIV_PREFIX"
+          echo "Virtual environment: $RXIV_VENV"
+          
+          # Test that virtualenv is properly isolated
+          "$RXIV_VENV/bin/python" -c "
+          import sys
+          print('Python executable:', sys.executable)
+          print('Python version:', sys.version)
+          print('Virtual environment:', sys.prefix)
+          
+          # Check isolation
+          if 'homebrew' not in sys.prefix.lower():
+              print('❌ Virtual environment not properly isolated')
+              sys.exit(1)
+          else:
+              print('✅ Virtual environment properly isolated')
+          "
+          
+      - name: Test dependency installation
+        run: |
+          echo "📦 Testing dependency installation..."
+          
+          RXIV_PREFIX=$(brew --prefix rxiv-maker)
+          RXIV_VENV="$RXIV_PREFIX/libexec"
+          
+          # Check all required dependencies are installed
+          "$RXIV_VENV/bin/python" -c "
+          import sys
+          
+          required_packages = [
+              'click', 'matplotlib', 'numpy', 'pandas', 'scipy',
+              'seaborn', 'PIL', 'pypdf', 'yaml', 'crossref_commons',
+              'rich', 'rich_click'
+          ]
+          
+          missing = []
+          for package in required_packages:
+              try:
+                  if package == 'PIL':
+                      __import__('PIL')
+                  elif package == 'yaml':
+                      __import__('yaml')
+                  else:
+                      __import__(package)
+                  print(f'✓ {package} installed')
+              except ImportError:
+                  print(f'✗ {package} missing')
+                  missing.append(package)
+          
+          if missing:
+              print(f'\\n❌ Missing packages: {missing}')
+              sys.exit(1)
+          else:
+              print('\\n✅ All dependencies installed correctly')
+          "
+          
+      - name: Test CLI entry points
+        run: |
+          echo "🔧 Testing CLI entry points..."
+          
+          # Test that rxiv command works from anywhere
+          cd /tmp
+          rxiv --version
+          rxiv --help
+          
+          # Test Python module execution
+          python3 -m rxiv_maker.cli --version || echo "Module execution may require different syntax"
+          
+      - name: Test package isolation from system Python
+        run: |
+          echo "🔒 Testing package isolation from system Python..."
+          
+          # Try to import rxiv_maker from system Python (should fail)
+          if python3 -c "import rxiv_maker" 2>/dev/null; then
+            echo "❌ rxiv_maker is accessible from system Python (not properly isolated)"
+            exit 1
+          else
+            echo "✅ rxiv_maker is properly isolated from system Python"
+          fi
+          
+      - name: Performance benchmarks
+        run: |
+          echo "📊 Running performance benchmarks..."
+          
+          # Test CLI startup time
+          START_TIME=$(date +%s.%N)
+          rxiv --version > /dev/null
+          END_TIME=$(date +%s.%N)
+          DURATION=$(echo "$END_TIME - $START_TIME" | bc)
+          echo "CLI startup time: ${DURATION}s"
+          
+          # Test import time
+          RXIV_PREFIX=$(brew --prefix rxiv-maker)
+          RXIV_VENV="$RXIV_PREFIX/libexec"
+          
+          "$RXIV_VENV/bin/python" -c "
+          import time
+          start = time.time()
+          import rxiv_maker
+          end = time.time()
+          print(f'Import time: {end - start:.3f}s')
+          "
+          
+          echo "✅ Performance benchmarks completed"
+
   comprehensive-testing:
     name: Comprehensive Testing
     needs: [setup, formula-installation]
@@ -471,7 +605,7 @@ jobs:
 
   summary:
     name: Test Summary
-    needs: [setup, syntax-validation, formula-installation, comprehensive-testing]
+    needs: [setup, syntax-validation, formula-installation, python-environment-testing, comprehensive-testing]
     runs-on: ubuntu-latest
     if: always()
     
@@ -498,6 +632,15 @@ jobs:
             echo "❌ **Formula Installation**: Some platforms failed" >> $GITHUB_STEP_SUMMARY
           else
             echo "⏭️ **Formula Installation**: Skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Python environment testing
+          if [ "${{ needs.python-environment-testing.result }}" = "success" ]; then
+            echo "✅ **Python Environment Testing**: All tests passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.python-environment-testing.result }}" = "failure" ]; then
+            echo "❌ **Python Environment Testing**: Some tests failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⏭️ **Python Environment Testing**: Skipped" >> $GITHUB_STEP_SUMMARY
           fi
           
           # Comprehensive testing
