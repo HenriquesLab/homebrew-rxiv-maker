@@ -8,7 +8,7 @@ class RxivMaker < Formula
   license "MIT"
 
   depends_on "python@3.11"
-  
+
   on_linux do
     depends_on "libyaml"
   end
