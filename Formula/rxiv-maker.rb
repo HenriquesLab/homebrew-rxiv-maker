@@ -3,8 +3,8 @@ class RxivMaker < Formula
 
   desc "Automated LaTeX article generation with modern CLI and figure support"
   homepage "https://github.com/henriqueslab/rxiv-maker"
-  url "https://files.pythonhosted.org/packages/8e/e0/87fe31c8e57b8638077a945fb31dd3878201058b04f35a569ec5f2969e23/rxiv_maker-1.4.0.tar.gz"
-  sha256 "15d9e9fbc1ad0ca42b6c64d487088fdaa0f365c3884781b918bf56af8787a2ed"
+  url "https://files.pythonhosted.org/packages/f2/a7/07c8c68c8e44cda429c1aae3ef1520d46402590ea86a5c84800eaac87505/rxiv_maker-1.4.5.tar.gz"
+  sha256 "f1ccdce643de014ad17b78f9632b4ee72b725000d82315fe59c0f05cc9af2d00"
   license "MIT"
 
   depends_on "python@3.11"
@@ -24,8 +24,8 @@ class RxivMaker < Formula
   end
 
   resource "folder2md4llms" do
-    url "https://files.pythonhosted.org/packages/1f/0e/6746e2dde1c8fbc74f54b4170e1b1cfd01940ad280a98eef51e73f3882ef/folder2md4llms-0.4.28.tar.gz"
-    sha256 "77010763c38b48904a330dbd46eefd0d287e0a058c5000ac04ae81b1ba8e2ed8"
+    url "https://files.pythonhosted.org/packages/08/1b/1f44e02a32cf6d9c837c0c7aa87df741f328ba00517d52b7010b6eb00757/folder2md4llms-0.4.35.tar.gz"
+    sha256 "a18b59884c060a7923ec1d71682d0f65e8886e9e4150cb56e3ea82581df0bcb2"
   end
 
   resource "lazydocs" do
