@@ -7,7 +7,6 @@ class RxivMaker < Formula
   sha256 "15d9e9fbc1ad0ca42b6c64d487088fdaa0f365c3884781b918bf56af8787a2ed"
   license "MIT"
 
-  depends_on "libyaml"
   depends_on "python@3.12"
 
   resource "click" do
