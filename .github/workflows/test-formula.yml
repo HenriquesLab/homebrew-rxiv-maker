@@ -314,7 +314,6 @@ jobs:
           
       - name: Test with LaTeX (macOS only)
         if: runner.os == 'macOS'
-        continue-on-error: true
         timeout-minutes: 15
         run: |
           echo "📄 Testing LaTeX functionality..."
@@ -332,9 +331,30 @@ jobs:
             echo "Using fallback LaTeX 2023 PATH"
           fi
           
-          # Test PDF generation (may fail due to missing packages)
-          cd test-manuscript
-          rxiv validate --no-doi || echo "Validation failed (expected without full LaTeX)"
+          # Test PDF generation with proper error handling
+          if [ -d "test-manuscript" ]; then
+            cd test-manuscript
+            LATEX_TEST_CODE=0
+            rxiv validate --no-doi || LATEX_TEST_CODE=$?
+            
+            if [ $LATEX_TEST_CODE -ne 0 ]; then
+              echo "⚠️ LaTeX validation failed with exit code: $LATEX_TEST_CODE"
+              echo "This is expected without full LaTeX package installation"
+              # Check if LaTeX is at least available
+              if command -v pdflatex >/dev/null 2>&1; then
+                echo "✅ LaTeX binary is available: $(which pdflatex)"
+                pdflatex --version | head -1
+              else
+                echo "❌ LaTeX binary not found in PATH"
+                exit 1
+              fi
+            else
+              echo "✅ LaTeX validation passed"
+            fi
+          else
+            echo "❌ test-manuscript directory not found"
+            exit 1
+          fi
           
           echo "✅ LaTeX integration test completed"
 
