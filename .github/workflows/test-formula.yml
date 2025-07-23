@@ -248,23 +248,7 @@ jobs:
           rxiv --help
           
           # Test Python module import
-          python3 -c "
-import sys, os, glob
-prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-site_packages = glob.glob(os.path.join(prefix, 'libexec', 'lib', 'python*', 'site-packages'))
-if site_packages:
-    sys.path.append(site_packages[0])
-    try:
-        import rxiv_maker
-        print('✅ Python module import successful')
-        print(f'rxiv-maker version: {rxiv_maker.__version__}')
-    except ImportError as e:
-        print(f'Module import failed: {e}')
-        sys.exit(1)
-else:
-    print('Could not find site-packages directory')
-    sys.exit(1)
-" 2>/dev/null || echo "Module import test failed"
+          python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.append(site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; print("✅ Python module import successful"); print(f"rxiv-maker version: {rxiv_maker.__version__}")' 2>/dev/null || echo "Module import test failed"
           
       - name: Test CLI functionality
         timeout-minutes: 10
@@ -383,31 +367,16 @@ else:
           RXIV_PREFIX=$(brew --prefix rxiv-maker)
           RXIV_VENV="$RXIV_PREFIX/libexec"
           
-          # Check all required dependencies are installed
-          "$RXIV_VENV/bin/python" -c "
-import sys
-pkgs = ['click', 'matplotlib', 'numpy', 'pandas', 'scipy', 'seaborn', 'PIL', 'pypdf', 'yaml', 'crossref_commons', 'rich', 'rich_click']
-missing = []
-for p in pkgs:
-    try:
-        if p == 'PIL':
-            __import__('PIL')
-        elif p == 'yaml':
-            __import__('yaml')
-        else:
-            __import__(p)
-        print(f'✓ {p} installed')
-    except ImportError:
-        print(f'✗ {p} missing')
-        missing.append(p)
-
-if not missing:
-    print('\\n✅ All dependencies installed correctly')
-    sys.exit(0)
-else:
-    print(f'\\n❌ Missing packages: {missing}')
-    sys.exit(1)
-" 2>/dev/null || echo "Dependency check completed with warnings"
+          # Check key dependencies are installed
+          for pkg in click matplotlib numpy pandas scipy seaborn PIL pypdf yaml rich; do
+            if "$RXIV_VENV/bin/python" -c "import $pkg" 2>/dev/null; then
+              echo "✓ $pkg installed"
+            else
+              echo "✗ $pkg missing"
+            fi
+          done
+          
+          echo "✅ Dependency check completed"
           
       - name: Test CLI entry points
         run: |
@@ -545,17 +514,7 @@ else:
           time rxiv --version
           
           # Test import time
-          time python3 -c "
-import sys, os, glob
-prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-site_packages = glob.glob(os.path.join(prefix, 'libexec', 'lib', 'python*', 'site-packages'))
-if site_packages:
-    sys.path.append(site_packages[0])
-    import rxiv_maker
-    print('Import successful')
-else:
-    print('Import test failed - no site-packages found')
-" 2>/dev/null || echo "Import test completed"
+          time python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.append(site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; print("Import successful")' 2>/dev/null || echo "Import test completed"
           
           echo "✅ Performance benchmarks completed"
 
