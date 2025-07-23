@@ -254,23 +254,7 @@ jobs:
           
           # Test Python module import with simpler approach
           echo "Testing Python module import..."
-          python3 -c "
-import sys, os, glob
-try:
-    prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-    site_packages = glob.glob(os.path.join(prefix, 'libexec', 'lib', 'python*', 'site-packages'))
-    if site_packages:
-        sys.path.insert(0, site_packages[0])
-        import rxiv_maker
-        print('✅ Python module import successful')
-        print(f'rxiv-maker version: {getattr(rxiv_maker, \"__version__\", \"unknown\")}')
-    else:
-        print('❌ Site-packages directory not found')
-        sys.exit(1)
-except Exception as e:
-    print(f'❌ Module import failed: {e}')
-    sys.exit(1)
-" || echo "Module import test failed but continuing..."
+          python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.insert(0, site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; print("✅ Python module import successful"); print(f"rxiv-maker version: {getattr(rxiv_maker, \"__version__\", \"unknown\")}")' || echo "Module import test failed but continuing..."
           
       - name: Test CLI functionality
         timeout-minutes: 10
@@ -379,15 +363,7 @@ except Exception as e:
           echo "Virtual environment: $RXIV_VENV"
           
           # Test that virtualenv is properly isolated
-          "$RXIV_VENV/bin/python" -c "
-import sys
-print('Python executable:', sys.executable)
-print('Python version:', sys.version.split()[0])
-print('Virtual environment:', sys.prefix)
-is_isolated = 'homebrew' in sys.prefix.lower() or 'cellar' in sys.prefix.lower()
-print('✅ Virtual environment properly isolated' if is_isolated else '❌ Virtual environment not properly isolated')
-sys.exit(0 if is_isolated else 1)
-"
+          "$RXIV_VENV/bin/python" -c 'import sys; print("Python executable:", sys.executable); print("Python version:", sys.version.split()[0]); print("Virtual environment:", sys.prefix); is_isolated = "homebrew" in sys.prefix.lower() or "cellar" in sys.prefix.lower(); print("✅ Virtual environment properly isolated" if is_isolated else "❌ Virtual environment not properly isolated"); sys.exit(0 if is_isolated else 1)'
           
       - name: Test dependency installation
         run: |

@@ -232,23 +232,7 @@ jobs:
           
           # Test Python module import with better error handling
           echo "Testing Python module import..."
-          python3 -c "
-import sys, os, glob
-try:
-    prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-    site_packages = glob.glob(os.path.join(prefix, 'libexec', 'lib', 'python*', 'site-packages'))
-    if site_packages:
-        sys.path.insert(0, site_packages[0])
-        import rxiv_maker
-        version = getattr(rxiv_maker, '__version__', 'unknown')
-        print(f'✅ Import successful, version: {version}')
-    else:
-        print('❌ Site-packages directory not found')
-        sys.exit(1)
-except Exception as e:
-    print(f'❌ Import failed: {e}')
-    sys.exit(1)
-" || echo "⚠️ Import test failed but continuing..."
+          python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.insert(0, site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; version = getattr(rxiv_maker, "__version__", "unknown"); print(f"✅ Import successful, version: {version}")' || echo "⚠️ Import test failed but continuing..."
           
           echo "✅ Formula testing completed"
 
