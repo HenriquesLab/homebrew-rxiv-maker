@@ -159,37 +159,37 @@ jobs:
           echo "🐍 Validating Python dependencies..."
           
           python3 -c "
-          import re
-          import urllib.request
-          import urllib.error
-          
-          with open('Formula/rxiv-maker.rb', 'r') as f:
-              content = f.read()
-          
-          # Extract resource blocks
-          resources = re.findall(r'resource \"([^\"]+)\" do.*?end', content, re.DOTALL)
-          
-          print('Python dependencies found in formula:')
-          for resource in resources:
-              print(f'  - {resource}')
-              
-          # Verify each dependency exists on PyPI
-          failed = []
-          for resource in resources:
-              try:
-                  url = f'https://pypi.org/pypi/{resource}/json'
-                  urllib.request.urlopen(url)
-                  print(f'✓ {resource} exists on PyPI')
-              except urllib.error.URLError as e:
-                  print(f'✗ {resource} not found on PyPI: {e}')
-                  failed.append(resource)
-          
-          if failed:
-              print(f'Failed dependencies: {failed}')
-              exit(1)
-          else:
-              print('✅ All dependencies verified on PyPI')
-          "
+import re
+import urllib.request
+import urllib.error
+
+with open('Formula/rxiv-maker.rb', 'r') as f:
+    content = f.read()
+
+# Extract resource blocks
+resources = re.findall(r'resource \"([^\"]+)\" do.*?end', content, re.DOTALL)
+
+print('Python dependencies found in formula:')
+for resource in resources:
+    print(f'  - {resource}')
+    
+# Verify each dependency exists on PyPI
+failed = []
+for resource in resources:
+    try:
+        url = f'https://pypi.org/pypi/{resource}/json'
+        urllib.request.urlopen(url)
+        print(f'✓ {resource} exists on PyPI')
+    except urllib.error.URLError as e:
+        print(f'✗ {resource} not found on PyPI: {e}')
+        failed.append(resource)
+
+if failed:
+    print(f'Failed dependencies: {failed}')
+    exit(1)
+else:
+    print('✅ All dependencies verified on PyPI')
+"
           
       - name: Check version consistency
         timeout-minutes: 3
@@ -265,23 +265,23 @@ jobs:
           
           # Test Python module import
           python3 -c "
-          import sys
-          import os
-          
-          # Add Homebrew site-packages to Python path
-          brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-          site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
-          
-          # Find the python site-packages directory
-          import glob
-          python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
-          if python_dirs:
-              sys.path.append(python_dirs[0])
-          
-          import rxiv_maker
-          print('✅ Python module import successful')
-          print(f'rxiv-maker version: {rxiv_maker.__version__}')
-          "
+import sys
+import os
+
+# Add Homebrew site-packages to Python path
+brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
+site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
+
+# Find the python site-packages directory
+import glob
+python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
+if python_dirs:
+    sys.path.append(python_dirs[0])
+
+import rxiv_maker
+print('✅ Python module import successful')
+print(f'rxiv-maker version: {rxiv_maker.__version__}')
+"
           
       - name: Test CLI functionality
         timeout-minutes: 10
@@ -392,18 +392,18 @@ jobs:
           
           # Test that virtualenv is properly isolated
           "$RXIV_VENV/bin/python" -c "
-          import sys
-          print('Python executable:', sys.executable)
-          print('Python version:', sys.version)
-          print('Virtual environment:', sys.prefix)
-          
-          # Check isolation
-          if 'homebrew' not in sys.prefix.lower():
-              print('❌ Virtual environment not properly isolated')
-              sys.exit(1)
-          else:
-              print('✅ Virtual environment properly isolated')
-          "
+import sys
+print('Python executable:', sys.executable)
+print('Python version:', sys.version)
+print('Virtual environment:', sys.prefix)
+
+# Check isolation
+if 'homebrew' not in sys.prefix.lower():
+    print('❌ Virtual environment not properly isolated')
+    sys.exit(1)
+else:
+    print('✅ Virtual environment properly isolated')
+"
           
       - name: Test dependency installation
         run: |
@@ -414,34 +414,34 @@ jobs:
           
           # Check all required dependencies are installed
           "$RXIV_VENV/bin/python" -c "
-          import sys
-          
-          required_packages = [
-              'click', 'matplotlib', 'numpy', 'pandas', 'scipy',
-              'seaborn', 'PIL', 'pypdf', 'yaml', 'crossref_commons',
-              'rich', 'rich_click'
-          ]
-          
-          missing = []
-          for package in required_packages:
-              try:
-                  if package == 'PIL':
-                      __import__('PIL')
-                  elif package == 'yaml':
-                      __import__('yaml')
-                  else:
-                      __import__(package)
-                  print(f'✓ {package} installed')
-              except ImportError:
-                  print(f'✗ {package} missing')
-                  missing.append(package)
-          
-          if missing:
-              print(f'\\n❌ Missing packages: {missing}')
-              sys.exit(1)
-          else:
-              print('\\n✅ All dependencies installed correctly')
-          "
+import sys
+
+required_packages = [
+    'click', 'matplotlib', 'numpy', 'pandas', 'scipy',
+    'seaborn', 'PIL', 'pypdf', 'yaml', 'crossref_commons',
+    'rich', 'rich_click'
+]
+
+missing = []
+for package in required_packages:
+    try:
+        if package == 'PIL':
+            __import__('PIL')
+        elif package == 'yaml':
+            __import__('yaml')
+        else:
+            __import__(package)
+        print(f'✓ {package} installed')
+    except ImportError:
+        print(f'✗ {package} missing')
+        missing.append(package)
+
+if missing:
+    print(f'\\n❌ Missing packages: {missing}')
+    sys.exit(1)
+else:
+    print('\\n✅ All dependencies installed correctly')
+"
           
       - name: Test CLI entry points
         run: |
@@ -483,12 +483,12 @@ jobs:
           RXIV_VENV="$RXIV_PREFIX/libexec"
           
           "$RXIV_VENV/bin/python" -c "
-          import time
-          start = time.time()
-          import rxiv_maker
-          end = time.time()
-          print(f'Import time: {end - start:.3f}s')
-          "
+import time
+start = time.time()
+import rxiv_maker
+end = time.time()
+print(f'Import time: {end - start:.3f}s')
+"
           
           echo "✅ Performance benchmarks completed"
 
@@ -586,20 +586,20 @@ jobs:
           
           # Test import time
           time python3 -c "
-          import sys
-          import os
-          import glob
-          
-          # Add Homebrew site-packages to Python path
-          brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-          site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
-          python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
-          if python_dirs:
-              sys.path.append(python_dirs[0])
-          
-          import rxiv_maker
-          print('Import successful')
-          "
+import sys
+import os
+import glob
+
+# Add Homebrew site-packages to Python path
+brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
+site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
+python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
+if python_dirs:
+    sys.path.append(python_dirs[0])
+
+import rxiv_maker
+print('Import successful')
+"
           
           echo "✅ Performance benchmarks completed"
 
