@@ -199,7 +199,9 @@ jobs:
           echo "🔍 Validating updated formula..."
           
           # Test formula syntax
-          brew audit --strict --formula ./Formula/rxiv-maker.rb
+          brew tap-new homebrew/local
+          cp Formula/rxiv-maker.rb $(brew --repository homebrew/local)/Formula/rxiv-maker.rb
+          brew audit --strict --formula homebrew/local/rxiv-maker
           
           # Test formula parsing
           brew info --formula ./Formula/rxiv-maker.rb

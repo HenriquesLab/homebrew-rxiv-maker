@@ -122,10 +122,15 @@ jobs:
         run: |
           echo "🔍 Validating formula syntax..."
           
-          # Test formula syntax using path
-          brew audit --strict --formula ./Formula/rxiv-maker.rb
+          # Add this tap to Homebrew for testing
+          brew tap-new homebrew/local
+          brew extract --version=1.0.0 rxiv-maker homebrew/core homebrew/local || true
+          cp Formula/rxiv-maker.rb $(brew --repository homebrew/local)/Formula/rxiv-maker.rb
           
-          # Test formula parsing using path
+          # Test formula syntax using formula name
+          brew audit --strict --formula homebrew/local/rxiv-maker
+          
+          # Test formula parsing using path (this still works)
           brew info --formula ./Formula/rxiv-maker.rb
           
           echo "✅ Formula syntax validation passed"
