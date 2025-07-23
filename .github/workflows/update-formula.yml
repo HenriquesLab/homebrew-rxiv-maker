@@ -157,8 +157,8 @@ jobs:
           
           # Get SHA256 hash from PyPI
           echo "Fetching SHA256 hash for version $TARGET_VERSION..."
-          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "import sys,json; data=json.load(sys.stdin); [print(f['digests']['sha256']) for f in data['releases']['$TARGET_VERSION'] if f['packagetype']=='sdist'][:1] or print('error')")
-          if [ -z "$SHA256" ]; then SHA256="error"; fi
+          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "import sys,json; data=json.load(sys.stdin); releases=data.get('releases',{}).get('$TARGET_VERSION',[]); sdist=[f for f in releases if f.get('packagetype')=='sdist']; print(sdist[0]['digests']['sha256'] if sdist else 'error')")
+          if [ -z "$SHA256" ] || [ "$SHA256" = "None" ]; then SHA256="error"; fi
           
           if [ "$SHA256" = "error" ]; then
             echo "❌ Failed to fetch SHA256 hash"
@@ -232,7 +232,11 @@ jobs:
           
           # Test Python module import with better error handling
           echo "Testing Python module import..."
-          python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.insert(0, site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; version = getattr(rxiv_maker, "__version__", "unknown"); print(f"✅ Import successful, version: {version}")' || echo "⚠️ Import test failed but continuing..."
+          if python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.insert(0, site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; version = getattr(rxiv_maker, "__version__", "unknown"); print(f"✅ Import successful, version: {version}")'; then
+            echo "✅ Python module import test passed"
+          else
+            echo "⚠️ Import test failed but continuing..."
+          fi
           
           echo "✅ Formula testing completed"
 
@@ -254,8 +258,13 @@ jobs:
           TARGET_VERSION="${{ needs.check-updates.outputs.target-version }}"
           
           # Re-apply the same updates (since we're in a clean checkout)
-          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "import sys,json; data=json.load(sys.stdin); [print(f['digests']['sha256']) for f in data['releases']['$TARGET_VERSION'] if f['packagetype']=='sdist'][:1] or print('error')")
-          if [ -z "$SHA256" ]; then SHA256="error"; fi
+          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "import sys,json; data=json.load(sys.stdin); releases=data.get('releases',{}).get('$TARGET_VERSION',[]); sdist=[f for f in releases if f.get('packagetype')=='sdist']; print(sdist[0]['digests']['sha256'] if sdist else 'error')")
+          if [ -z "$SHA256" ] || [ "$SHA256" = "None" ]; then SHA256="error"; fi
+          
+          if [ "$SHA256" = "error" ]; then
+            echo "❌ Failed to fetch SHA256 hash"
+            exit 1
+          fi
           
           sed -i "s|rxiv_maker-[0-9.]*\.tar\.gz|rxiv_maker-$TARGET_VERSION.tar.gz|g" Formula/rxiv-maker.rb
           sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"$SHA256\"|g" Formula/rxiv-maker.rb
@@ -340,8 +349,13 @@ jobs:
           TARGET_VERSION="${{ needs.check-updates.outputs.target-version }}"
           
           # Re-apply the same updates
-          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "import sys,json; data=json.load(sys.stdin); [print(f['digests']['sha256']) for f in data['releases']['$TARGET_VERSION'] if f['packagetype']=='sdist'][:1] or print('error')")
-          if [ -z "$SHA256" ]; then SHA256="error"; fi
+          SHA256=$(curl -s "https://pypi.org/pypi/rxiv-maker/json" | python3 -c "import sys,json; data=json.load(sys.stdin); releases=data.get('releases',{}).get('$TARGET_VERSION',[]); sdist=[f for f in releases if f.get('packagetype')=='sdist']; print(sdist[0]['digests']['sha256'] if sdist else 'error')")
+          if [ -z "$SHA256" ] || [ "$SHA256" = "None" ]; then SHA256="error"; fi
+          
+          if [ "$SHA256" = "error" ]; then
+            echo "❌ Failed to fetch SHA256 hash"
+            exit 1
+          fi
           
           sed -i "s|rxiv_maker-[0-9.]*\.tar\.gz|rxiv_maker-$TARGET_VERSION.tar.gz|g" Formula/rxiv-maker.rb
           sed -i "s|sha256 \"[a-f0-9]*\"|sha256 \"$SHA256\"|g" Formula/rxiv-maker.rb
@@ -352,14 +366,17 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           git add Formula/rxiv-maker.rb
-          git commit -m "Update rxiv-maker to version ${{ needs.check-updates.outputs.target-version }}
+          git commit -m "$(cat <<'EOF'
+          Update rxiv-maker to version ${{ needs.check-updates.outputs.target-version }}
 
           - Updated version from ${{ needs.check-updates.outputs.current-version }} to ${{ needs.check-updates.outputs.target-version }}
           - Updated download URL and SHA256 checksum
           - Formula syntax validated
           - Basic functionality tested
           
-          Auto-updated by update-formula workflow"
+          Auto-updated by update-formula workflow
+          EOF
+          )"
           
           git push origin main
 

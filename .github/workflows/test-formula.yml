@@ -122,11 +122,8 @@ jobs:
         run: |
           echo "🔍 Validating formula syntax..."
           
-          # Add this tap to Homebrew for testing
-          brew tap homebrew-rxiv-maker/test ${{ github.workspace }}
-          
-          # Test formula syntax using tap path
-          brew audit --strict --formula homebrew-rxiv-maker/test/rxiv-maker
+          # Test formula syntax using path
+          brew audit --strict --formula ./Formula/rxiv-maker.rb
           
           # Test formula parsing using path
           brew info --formula ./Formula/rxiv-maker.rb
@@ -252,9 +249,13 @@ jobs:
           rxiv --version
           rxiv --help
           
-          # Test Python module import with simpler approach
+          # Test Python module import with error handling
           echo "Testing Python module import..."
-          python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.insert(0, site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; print("✅ Python module import successful"); print(f"rxiv-maker version: {getattr(rxiv_maker, \"__version__\", \"unknown\")}")' || echo "Module import test failed but continuing..."
+          if python3 -c 'import sys, os, glob; prefix = os.popen("brew --prefix rxiv-maker").read().strip(); site_packages = glob.glob(os.path.join(prefix, "libexec", "lib", "python*", "site-packages")); sys.path.insert(0, site_packages[0]) if site_packages else sys.exit(1); import rxiv_maker; print("✅ Python module import successful"); print(f"rxiv-maker version: {getattr(rxiv_maker, \"__version__\", \"unknown\")}")'; then
+            echo "✅ Python module import test passed"
+          else
+            echo "⚠️ Python module import test failed but continuing..."
+          fi
           
       - name: Test CLI functionality
         timeout-minutes: 10
@@ -338,7 +339,7 @@ jobs:
     needs: [setup, formula-installation]
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: needs.setup.outputs.run-comprehensive == 'true'
+    if: needs.setup.outputs.run-comprehensive == 'true' && needs.formula-installation.result == 'success'
     
     steps:
       - name: Checkout repository
@@ -431,7 +432,7 @@ jobs:
     needs: [setup, formula-installation]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: needs.setup.outputs.run-comprehensive == 'true'
+    if: needs.setup.outputs.run-comprehensive == 'true' && needs.formula-installation.result == 'success'
     
     steps:
       - name: Checkout repository
