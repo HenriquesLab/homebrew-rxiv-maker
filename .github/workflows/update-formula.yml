@@ -201,7 +201,7 @@ jobs:
           # Test formula syntax
           git config --global user.email "test@example.com"
           git config --global user.name "Test User"
-          brew tap-new homebrew/local
+          brew tap-new homebrew/local || true
           cp Formula/rxiv-maker.rb $(brew --repository homebrew/local)/Formula/rxiv-maker.rb
           brew audit --strict --formula homebrew/local/rxiv-maker
           
@@ -226,8 +226,8 @@ jobs:
           export HOMEBREW_NO_INSTALL_CLEANUP=1
           export HOMEBREW_MAKE_JOBS=$(nproc)
           
-          # Install the updated formula with verbose output
-          brew install --formula --verbose ./Formula/rxiv-maker.rb
+          # Install the updated formula with verbose output (force to avoid tap conflicts)
+          brew install --force --formula --verbose ./Formula/rxiv-maker.rb
           
           # Test basic functionality
           which rxiv

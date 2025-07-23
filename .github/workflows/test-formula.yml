@@ -127,7 +127,7 @@ jobs:
           git config --global user.name "Test User"
           
           # Add this tap to Homebrew for testing
-          brew tap-new homebrew/local
+          brew tap-new homebrew/local || true
           cp Formula/rxiv-maker.rb $(brew --repository homebrew/local)/Formula/rxiv-maker.rb
           
           # Test formula syntax using formula name
@@ -237,12 +237,13 @@ jobs:
           export HOMEBREW_NO_INSTALL_CLEANUP=1
           export HOMEBREW_MAKE_JOBS=$(nproc)
           
-          # Force installation if requested
+          # Force installation if requested or to avoid tap conflicts
           if [ "${{ inputs.force-install }}" = "true" ]; then
-            echo "Force installation enabled"
+            echo "Force installation enabled"  
             brew install --force --formula --verbose ./Formula/rxiv-maker.rb
           else
-            brew install --formula --verbose ./Formula/rxiv-maker.rb
+            echo "Installing with force to avoid tap conflicts"
+            brew install --force --formula --verbose ./Formula/rxiv-maker.rb
           fi
           
           echo "✅ Formula installation completed"
