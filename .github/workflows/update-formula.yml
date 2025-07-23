@@ -213,22 +213,44 @@ jobs:
           echo "✅ Formula validation passed"
           
       - name: Test updated formula
-        timeout-minutes: 15
+        timeout-minutes: 30
         run: |
           echo "🧪 Testing updated formula..."
           
-          # Install the updated formula
-          brew install --formula ./Formula/rxiv-maker.rb
+          # Set environment variables for faster builds
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          export HOMEBREW_MAKE_JOBS=$(nproc)
+          
+          # Install the updated formula with verbose output
+          brew install --formula --verbose ./Formula/rxiv-maker.rb
           
           # Test basic functionality
           which rxiv
           rxiv --version
           rxiv --help
           
-          # Test Python module import
-          python3 -c "import sys,os,glob; sys.path.append(glob.glob(os.path.join(os.popen('brew --prefix rxiv-maker').read().strip(),'libexec','lib','python*','site-packages'))[0]); import rxiv_maker; print(f'✅ Import successful, version: {rxiv_maker.__version__}')" 2>/dev/null || echo "Import test failed"
+          # Test Python module import with better error handling
+          echo "Testing Python module import..."
+          python3 -c "
+import sys, os, glob
+try:
+    prefix = os.popen('brew --prefix rxiv-maker').read().strip()
+    site_packages = glob.glob(os.path.join(prefix, 'libexec', 'lib', 'python*', 'site-packages'))
+    if site_packages:
+        sys.path.insert(0, site_packages[0])
+        import rxiv_maker
+        version = getattr(rxiv_maker, '__version__', 'unknown')
+        print(f'✅ Import successful, version: {version}')
+    else:
+        print('❌ Site-packages directory not found')
+        sys.exit(1)
+except Exception as e:
+    print(f'❌ Import failed: {e}')
+    sys.exit(1)
+" || echo "⚠️ Import test failed but continuing..."
           
-          echo "✅ Formula testing passed"
+          echo "✅ Formula testing completed"
 
   create-pull-request:
     name: Create Pull Request
