@@ -199,6 +199,8 @@ jobs:
           echo "🔍 Validating updated formula..."
           
           # Test formula syntax
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
           brew tap-new homebrew/local
           cp Formula/rxiv-maker.rb $(brew --repository homebrew/local)/Formula/rxiv-maker.rb
           brew audit --strict --formula homebrew/local/rxiv-maker
