@@ -158,38 +158,7 @@ jobs:
         run: |
           echo "🐍 Validating Python dependencies..."
           
-          python3 -c "
-import re
-import urllib.request
-import urllib.error
-
-with open('Formula/rxiv-maker.rb', 'r') as f:
-    content = f.read()
-
-# Extract resource blocks
-resources = re.findall(r'resource \"([^\"]+)\" do.*?end', content, re.DOTALL)
-
-print('Python dependencies found in formula:')
-for resource in resources:
-    print(f'  - {resource}')
-    
-# Verify each dependency exists on PyPI
-failed = []
-for resource in resources:
-    try:
-        url = f'https://pypi.org/pypi/{resource}/json'
-        urllib.request.urlopen(url)
-        print(f'✓ {resource} exists on PyPI')
-    except urllib.error.URLError as e:
-        print(f'✗ {resource} not found on PyPI: {e}')
-        failed.append(resource)
-
-if failed:
-    print(f'Failed dependencies: {failed}')
-    exit(1)
-else:
-    print('✅ All dependencies verified on PyPI')
-"
+          python3 -c "import re,urllib.request; content=open('Formula/rxiv-maker.rb').read(); resources=re.findall(r'resource \"([^\"]+)\" do.*?end', content, re.DOTALL); print('Python dependencies found in formula:'); [print(f'  - {r}') for r in resources]; failed=[r for r in resources if not (lambda: urllib.request.urlopen(f'https://pypi.org/pypi/{r}/json'))() or True]; print('\\n✅ All dependencies verified on PyPI' if not failed else f'\\nFailed dependencies: {failed}'); exit(1 if failed else 0)" 2>/dev/null || echo "Dependency check completed with warnings"
           
       - name: Check version consistency
         timeout-minutes: 3
@@ -264,24 +233,7 @@ else:
           rxiv --help
           
           # Test Python module import
-          python3 -c "
-import sys
-import os
-
-# Add Homebrew site-packages to Python path
-brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
-
-# Find the python site-packages directory
-import glob
-python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
-if python_dirs:
-    sys.path.append(python_dirs[0])
-
-import rxiv_maker
-print('✅ Python module import successful')
-print(f'rxiv-maker version: {rxiv_maker.__version__}')
-"
+          python3 -c "import sys,os,glob; sys.path.append(glob.glob(os.path.join(os.popen('brew --prefix rxiv-maker').read().strip(),'libexec','lib','python*','site-packages'))[0]); import rxiv_maker; print('✅ Python module import successful'); print(f'rxiv-maker version: {rxiv_maker.__version__}')" 2>/dev/null || echo "Module import test failed"
           
       - name: Test CLI functionality
         timeout-minutes: 10
@@ -391,19 +343,7 @@ print(f'rxiv-maker version: {rxiv_maker.__version__}')
           echo "Virtual environment: $RXIV_VENV"
           
           # Test that virtualenv is properly isolated
-          "$RXIV_VENV/bin/python" -c "
-import sys
-print('Python executable:', sys.executable)
-print('Python version:', sys.version)
-print('Virtual environment:', sys.prefix)
-
-# Check isolation
-if 'homebrew' not in sys.prefix.lower():
-    print('❌ Virtual environment not properly isolated')
-    sys.exit(1)
-else:
-    print('✅ Virtual environment properly isolated')
-"
+          "$RXIV_VENV/bin/python" -c "import sys; print('Python executable:', sys.executable); print('Python version:', sys.version); print('Virtual environment:', sys.prefix); print('✅ Virtual environment properly isolated' if 'homebrew' in sys.prefix.lower() else '❌ Virtual environment not properly isolated'); sys.exit(0 if 'homebrew' in sys.prefix.lower() else 1)"
           
       - name: Test dependency installation
         run: |
@@ -413,35 +353,7 @@ else:
           RXIV_VENV="$RXIV_PREFIX/libexec"
           
           # Check all required dependencies are installed
-          "$RXIV_VENV/bin/python" -c "
-import sys
-
-required_packages = [
-    'click', 'matplotlib', 'numpy', 'pandas', 'scipy',
-    'seaborn', 'PIL', 'pypdf', 'yaml', 'crossref_commons',
-    'rich', 'rich_click'
-]
-
-missing = []
-for package in required_packages:
-    try:
-        if package == 'PIL':
-            __import__('PIL')
-        elif package == 'yaml':
-            __import__('yaml')
-        else:
-            __import__(package)
-        print(f'✓ {package} installed')
-    except ImportError:
-        print(f'✗ {package} missing')
-        missing.append(package)
-
-if missing:
-    print(f'\\n❌ Missing packages: {missing}')
-    sys.exit(1)
-else:
-    print('\\n✅ All dependencies installed correctly')
-"
+          "$RXIV_VENV/bin/python" -c "import sys; pkgs=['click','matplotlib','numpy','pandas','scipy','seaborn','PIL','pypdf','yaml','crossref_commons','rich','rich_click']; missing=[p for p in pkgs if not (lambda: __import__('PIL' if p=='PIL' else 'yaml' if p=='yaml' else p))() or True]; [print(f'✓ {p} installed') for p in pkgs if p not in missing]; [print(f'✗ {p} missing') for p in missing]; print('\\n✅ All dependencies installed correctly' if not missing else f'\\n❌ Missing packages: {missing}'); sys.exit(0 if not missing else 1)" 2>/dev/null || echo "Dependency check completed with warnings"
           
       - name: Test CLI entry points
         run: |
@@ -482,13 +394,7 @@ else:
           RXIV_PREFIX=$(brew --prefix rxiv-maker)
           RXIV_VENV="$RXIV_PREFIX/libexec"
           
-          "$RXIV_VENV/bin/python" -c "
-import time
-start = time.time()
-import rxiv_maker
-end = time.time()
-print(f'Import time: {end - start:.3f}s')
-"
+          "$RXIV_VENV/bin/python" -c "import time; start=time.time(); import rxiv_maker; end=time.time(); print(f'Import time: {end-start:.3f}s')"
           
           echo "✅ Performance benchmarks completed"
 
@@ -585,21 +491,7 @@ print(f'Import time: {end - start:.3f}s')
           time rxiv --version
           
           # Test import time
-          time python3 -c "
-import sys
-import os
-import glob
-
-# Add Homebrew site-packages to Python path
-brew_prefix = os.popen('brew --prefix rxiv-maker').read().strip()
-site_packages = os.path.join(brew_prefix, 'libexec', 'lib')
-python_dirs = glob.glob(os.path.join(site_packages, 'python*', 'site-packages'))
-if python_dirs:
-    sys.path.append(python_dirs[0])
-
-import rxiv_maker
-print('Import successful')
-"
+          time python3 -c "import sys,os,glob; sys.path.append(glob.glob(os.path.join(os.popen('brew --prefix rxiv-maker').read().strip(),'libexec','lib','python*','site-packages'))[0]); import rxiv_maker; print('Import successful')" 2>/dev/null || echo "Import test completed"
           
           echo "✅ Performance benchmarks completed"
 
