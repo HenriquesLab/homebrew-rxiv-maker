@@ -221,13 +221,18 @@ jobs:
         run: |
           echo "🧪 Testing updated formula..."
           
+          # Clear any existing installations and cache to avoid conflicts
+          brew uninstall rxiv-maker --ignore-dependencies || true
+          brew untap homebrew/local || true
+          brew cleanup --prune=all
+          
           # Set environment variables for faster builds
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
           export HOMEBREW_MAKE_JOBS=$(nproc)
           
-          # Install the updated formula with verbose output (force to avoid tap conflicts)
-          brew install --force --formula --verbose ./Formula/rxiv-maker.rb
+          # Install the updated formula with verbose output
+          brew install --formula --verbose ./Formula/rxiv-maker.rb
           
           # Test basic functionality
           which rxiv

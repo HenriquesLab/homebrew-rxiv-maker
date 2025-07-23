@@ -232,18 +232,23 @@ jobs:
         run: |
           echo "🔧 Installing rxiv-maker formula..."
           
+          # Clear any existing installations and cache to avoid conflicts
+          brew uninstall rxiv-maker --ignore-dependencies || true
+          brew untap homebrew/local || true
+          brew cleanup --prune=all
+          
           # Set environment variables for faster builds
           export HOMEBREW_NO_AUTO_UPDATE=1
           export HOMEBREW_NO_INSTALL_CLEANUP=1
           export HOMEBREW_MAKE_JOBS=$(nproc)
           
-          # Force installation if requested or to avoid tap conflicts
+          # Install formula (cleanup above should prevent conflicts)
           if [ "${{ inputs.force-install }}" = "true" ]; then
             echo "Force installation enabled"  
             brew install --force --formula --verbose ./Formula/rxiv-maker.rb
           else
-            echo "Installing with force to avoid tap conflicts"
-            brew install --force --formula --verbose ./Formula/rxiv-maker.rb
+            echo "Installing formula (conflicts cleared by cleanup)"
+            brew install --formula --verbose ./Formula/rxiv-maker.rb
           fi
           
           echo "✅ Formula installation completed"
