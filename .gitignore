@@ -17,3 +17,36 @@ Thumbs.db
 
 # Testing
 .brew_tests/
+
+# Repository contamination prevention
+# This is a Homebrew tap - prevent main rxiv-maker project files
+pyproject.toml
+Makefile
+src/
+tests/
+*.py
+*.yml
+*.yaml
+requirements*.txt
+setup.py
+setup.cfg
+*.egg-info/
+__pycache__/
+
+# Prevent other package manager files
+bucket/
+*.json
+*.ps1
+
+# Prevent VSCode extension files
+package.json
+*.ts
+*.js
+*.mjs
+syntaxes/
+schemas/
+language-configuration.json
+*.tmLanguage.json
+.vscodeignore
+esbuild.js
+eslint.config.mjs
