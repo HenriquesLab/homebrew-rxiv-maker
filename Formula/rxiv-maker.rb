@@ -1,8 +1,8 @@
 class RxivMaker < Formula
   desc "Automated LaTeX article generation with modern CLI and figure creation"
   homepage "https://github.com/HenriquesLab/rxiv-maker"
-  url "https://files.pythonhosted.org/packages/source/r/rxiv-maker/rxiv_maker-1.4.18.tar.gz"
-  sha256 "36a3a1a45f0e5998df255d00f0974703a1e16cc00bd24e35aa2b0c3530fc009c"
+  url "https://files.pythonhosted.org/packages/35/06/5d5a2892f00cd40d307f94960249a9adb649c9eb0f205423234e90bb394a/rxiv_maker-1.4.19.tar.gz"
+  sha256 "b295d7464e58c5d346f0245199a6a1cd2fe49ab2e9af4f5af7896035b4d9c237"
   license "MIT"
 
   depends_on "python"
@@ -44,7 +44,9 @@ class RxivMaker < Formula
         rxiv track-changes v1.0.0     # Track changes vs git tag
 
       Enable auto-completion:
-        rxiv --install-completion zsh  # or bash, fish
+        rxiv completion zsh           # Install for zsh
+        rxiv completion bash          # Install for bash
+        rxiv completion fish          # Install for fish
 
       Documentation: https://github.com/henriqueslab/rxiv-maker#readme
       VS Code Extension: https://github.com/HenriquesLab/vscode-rxiv-maker
