@@ -1,6 +1,11 @@
 # Homebrew Tap for rxiv-maker
 
-A [Homebrew](https://brew.sh/) tap for installing [rxiv-maker](https://github.com/henriqueslab/rxiv-maker), an automated LaTeX article generation system.
+A [Homebrew](https://brew.sh/) tap for installing [rxiv-maker](https://github.com/henriqueslab/rxiv-maker), an automated LaTeX article generation system with modern CLI and figure creation capabilities.
+
+[![DOI](https://img.shields.io/badge/DOI-10.48550%2FarXiv.2508.00836-blue)](https://doi.org/10.48550/arXiv.2508.00836)
+[![License](https://img.shields.io/github/license/henriqueslab/rxiv-maker?color=Green)](https://github.com/henriqueslab/rxiv-maker/blob/main/LICENSE)
+
+**Rxiv-Maker** transforms scientific writing from chaos to clarity by converting Markdown manuscripts into publication-ready PDFs with reproducible figures, professional typesetting, and zero LaTeX hassle.
 
 ## Installation
 
@@ -10,64 +15,25 @@ A [Homebrew](https://brew.sh/) tap for installing [rxiv-maker](https://github.co
 
 ### Quick Install
 ```bash
-# Add the tap
+# Add the tap (one-time setup)
 brew tap henriqueslab/rxiv-maker
 
-# Install rxiv-maker
+# Install rxiv-maker with all dependencies
 brew install rxiv-maker
+
+# Verify installation
+rxiv check-installation
+
+# Quick start with modern CLI
+rxiv init MY_PAPER/           # Initialize new manuscript
+rxiv pdf MY_PAPER/            # Generate PDF
 ```
 
-### System Dependencies
-rxiv-maker requires additional system dependencies for full functionality:
-
-#### macOS
-```bash
-# Install LaTeX distribution (recommended)
-brew install --cask mactex
-
-# Or minimal LaTeX installation
-brew install --cask basictex
-
-# Git is usually pre-installed with Xcode Command Line Tools
-# If not available:
-xcode-select --install
-```
-
-#### Linux
-```bash
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install texlive-full git make
-
-# Fedora/CentOS/RHEL
-sudo dnf install texlive-scheme-full git make
-
-# Arch Linux
-sudo pacman -S texlive-most git make
-```
-
-## Usage
-
-After installation, the `rxiv` command will be available in your PATH:
-
-```bash
-# Initialize a new manuscript
-rxiv init
-
-# Generate PDF
-rxiv pdf
-
-# Show help
-rxiv --help
-
-# Check version
-rxiv version
-```
+**Note:** LaTeX (texlive) is automatically installed as a dependency - no additional setup required!
 
 ## Updating
-
 ```bash
-# Update Homebrew and all packages
+# Update all packages
 brew update && brew upgrade
 
 # Update only rxiv-maker
@@ -75,7 +41,6 @@ brew upgrade rxiv-maker
 ```
 
 ## Uninstalling
-
 ```bash
 # Remove rxiv-maker
 brew uninstall rxiv-maker
@@ -84,34 +49,7 @@ brew uninstall rxiv-maker
 brew untap henriqueslab/rxiv-maker
 ```
 
-## Troubleshooting
-
-### Python Environment
-rxiv-maker is installed in an isolated Python virtual environment to avoid conflicts with system Python packages. This follows Python PEP 668 best practices.
-
-### LaTeX Issues
-If you encounter LaTeX compilation errors:
-
-#### macOS
-1. Ensure MacTeX or BasicTeX is installed
-2. Add LaTeX to PATH: `echo 'export PATH="/usr/local/texlive/2023/bin/universal-darwin:$PATH"' >> ~/.zshrc`
-3. Reload shell: `source ~/.zshrc`
-4. Verify: `which pdflatex`
-
-#### Linux
-1. Install full TeXLive distribution for best compatibility
-2. Verify LaTeX installation: `pdflatex --version`
-3. For Ubuntu/Debian: `sudo apt-get install texlive-latex-extra texlive-fonts-recommended`
-
-### Permission Issues
-If you encounter permission errors:
-```bash
-# Fix Homebrew permissions
-sudo chown -R $(whoami) $(brew --prefix)/*
-
-# Or reinstall Homebrew (if issues persist)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
+## Homebrew-Specific Troubleshooting
 
 ### PATH Issues
 If `rxiv` command is not found:
@@ -128,35 +66,49 @@ echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.bash_profile
 source ~/.bash_profile
 ```
 
-## Development
-
-This tap automatically tracks releases from the [official rxiv-maker PyPI package](https://pypi.org/project/rxiv-maker/).
-
-### Manual Updates
-To manually update the formula:
-1. Check the latest version on PyPI
-2. Update `Formula/rxiv-maker.rb`
-3. Calculate new SHA256: `brew fetch --build-from-source rxiv-maker`
-4. Test the formula: `brew install --build-from-source rxiv-maker`
-
-### Testing
+### Permission Issues
+If you encounter permission errors:
 ```bash
-# Test formula syntax
-brew audit --strict rxiv-maker
-
-# Test installation
-brew install --verbose --debug rxiv-maker
-
-# Test functionality
-rxiv --help
+# Fix Homebrew permissions
+sudo chown -R $(whoami) $(brew --prefix)/*
 ```
 
-## Support
+## Complete Documentation
 
-- **rxiv-maker Issues**: [GitHub Issues](https://github.com/henriqueslab/rxiv-maker/issues)
-- **Tap Issues**: [GitHub Issues](https://github.com/henriqueslab/homebrew-rxiv-maker/issues)
-- **Documentation**: [rxiv-maker README](https://github.com/henriqueslab/rxiv-maker#readme)
-- **Homebrew Docs**: [Formula Cookbook](https://docs.brew.sh/Formula-Cookbook)
+For comprehensive documentation, advanced features, and detailed usage instructions, visit the main project:
+
+**📚 [Complete rxiv-maker Documentation](https://github.com/henriqueslab/rxiv-maker#readme)**
+
+### Key Resources
+- **[Installation Guide](https://github.com/henriqueslab/rxiv-maker/blob/main/docs/getting-started/installation.md)** - All installation methods
+- **[User Guide](https://github.com/henriqueslab/rxiv-maker/blob/main/docs/getting-started/user_guide.md)** - Complete usage instructions
+- **[VS Code Extension](https://github.com/HenriquesLab/vscode-rxiv-maker)** - Enhanced editing experience
+- **[Google Colab](https://colab.research.google.com/github/HenriquesLab/rxiv-maker/blob/main/notebooks/rxiv_maker_colab.ipynb)** - Try without installation
+- **[GitHub Issues](https://github.com/henriqueslab/rxiv-maker/issues)** - Support and bug reports
+- **[GitHub Discussions](https://github.com/henriqueslab/rxiv-maker/discussions)** - Community support
+
+### Alternative Installation Methods
+- **Modern CLI**: `pip install rxiv-maker`
+- **Docker**: Containerized execution with minimal dependencies
+- **Google Colab**: Browser-based, zero installation
+- **GitHub Actions**: Team collaboration and automation
+
+## Citation
+
+If you use Rxiv-Maker in your research, please cite our work:
+
+**BibTeX:**
+```bibtex
+@misc{saraiva_2025_rxivmaker,
+      title={Rxiv-Maker: an automated template engine for streamlined scientific publications}, 
+      author={Bruno M. Saraiva and Guillaume Jaquemet and Ricardo Henriques},
+      year={2025},
+      eprint={2508.00836},
+      archivePrefix={arXiv},
+      primaryClass={cs.DL},
+      url={https://arxiv.org/abs/2508.00836}, 
+}
+```
 
 ## License
 
