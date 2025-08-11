@@ -29,24 +29,6 @@ class RxivMaker < Formula
     system bin/"rxiv", "--version" || odie("rxiv CLI not available after installation")
   end
 
-  def uninstall
-    if which("pipx")
-      result = system "pipx", "list", "--short", out: File::NULL, err: File::NULL
-      if result
-        installed = `pipx list --short 2>/dev/null`
-        if installed.include?("rxiv-maker")
-          system "pipx", "uninstall", "rxiv-maker", "--verbose"
-        else
-          opoo "rxiv-maker not found in pipx installations, skipping uninstall"
-        end
-      end
-    else
-      opoo "pipx not found, cannot clean up rxiv-maker installation"
-    end
-  rescue => e
-    opoo "Warning during uninstall cleanup: #{e.message}"
-  end
-
   def caveats
     <<~EOS
       rxiv-maker has been installed with all dependencies in an isolated virtual environment.
@@ -68,10 +50,16 @@ class RxivMaker < Formula
         rxiv completion bash          # Install for bash
         rxiv completion fish          # Install for fish
 
+      IMPORTANT: If you set up shell completions and later uninstall rxiv-maker,
+      you may need to manually remove completion lines from your shell profile:
+        ~/.zshrc, ~/.bashrc, ~/.bash_profile, or ~/.config/fish/config.fish
+      Look for lines containing 'rxiv' and '_RXIV_COMPLETE'.
+
       Documentation: https://github.com/henriqueslab/rxiv-maker#readme
       VS Code Extension: https://github.com/HenriquesLab/vscode-rxiv-maker
     EOS
   end
+
   test do
     # Minimal test to satisfy audit without invoking heavy runtime
     system "echo", "rxiv-maker"
