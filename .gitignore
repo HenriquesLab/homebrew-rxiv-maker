@@ -24,7 +24,6 @@ pyproject.toml
 Makefile
 src/
 tests/
-*.py
 *.yml
 *.yaml
 requirements*.txt
@@ -50,3 +49,4 @@ language-configuration.json
 .vscodeignore
 esbuild.js
 eslint.config.mjs
+CLAUDE.md

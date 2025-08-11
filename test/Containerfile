@@ -1,0 +1,64 @@
+# Containerfile for testing rxiv-maker Homebrew formula on Linux
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HOMEBREW_NO_ANALYTICS=1
+ENV HOMEBREW_NO_AUTO_UPDATE=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+        build-essential \
+        curl \
+        file \
+        git \
+        procps \
+        sudo \
+        python3 \
+        python3-pip \
+        && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for Homebrew
+RUN useradd -m -s /bin/bash linuxbrew && \
+    echo 'linuxbrew ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+USER linuxbrew
+WORKDIR /home/linuxbrew
+
+# Install Homebrew
+RUN NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Add Homebrew to PATH
+ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"
+
+ARG PREINSTALL_DEPS=0
+ARG PREINSTALL_SKIP_TEXLIVE=0
+
+# Optionally preinstall heavy Homebrew dependencies to cache large layers.
+# Set PREINSTALL_DEPS=1 at build time (via nox env) to enable.
+# To skip texlive (very large), set PREINSTALL_SKIP_TEXLIVE=1.
+RUN if [ "$PREINSTALL_DEPS" = "1" ]; then \
+            echo "Preinstalling Homebrew deps (PREINSTALL_SKIP_TEXLIVE=$PREINSTALL_SKIP_TEXLIVE)..." && \
+            brew update && \
+            PKGS="node pipx python" && \
+            if [ "$PREINSTALL_SKIP_TEXLIVE" != "1" ]; then PKGS="$PKGS texlive"; fi && \
+            echo "brew install $PKGS" && \
+            brew install $PKGS && \
+            brew cleanup -s || true ; \
+        else \
+            echo "Skipping heavy dependency preinstallation (PREINSTALL_DEPS=$PREINSTALL_DEPS)" ; \
+        fi
+
+# NOTE: We do not need pytest inside the container; tests use a Python script directly.
+
+# Set working directory for mounted workspace
+WORKDIR /workspace
+
+# Add a build label to help cache-bust when this file changes
+LABEL org.opencontainers.image.revision="2025-08-08-1"
+
+# Ensure Python outputs are unbuffered for real-time logs
+ENV PYTHONUNBUFFERED=1
+
+# Default command runs the Python test script (unbuffered). The file lives in the mounted volume.
+CMD ["python3", "-u", "test/test_homebrew_linux.py"]

@@ -5,16 +5,15 @@ class RxivMaker < Formula
   sha256 "7a0660bdb85a4c8753e99b51ab48fd7f2b4318d5ef2b4efb55b419077f80e4ca"
   license "MIT"
 
-  depends_on "python"
-  depends_on "pipx"
-  depends_on "texlive"
   depends_on "node"
+  depends_on "pipx"
+  depends_on "python"
+  depends_on "texlive"
 
   def install
     # Set pipx environment to install in formula's prefix
     ENV["PIPX_HOME"] = libexec/"pipx"
     ENV["PIPX_BIN_DIR"] = bin
-    
     # Install package via pipx using PyPI
     system "pipx", "install", "rxiv-maker==#{version}", "--pip-args=--no-cache-dir"
   end
@@ -22,7 +21,7 @@ class RxivMaker < Formula
   def uninstall
     # Remove rxiv-maker from pipx before Homebrew cleans up
     system "pipx", "uninstall", "rxiv-maker", "--verbose" if which("pipx")
-  rescue StandardError
+  rescue
     # Ignore errors if pipx or package not found
     nil
   end
