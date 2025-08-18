@@ -259,17 +259,13 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## ❌ PR Validation Failed
-
-The Homebrew formula validation failed for this PR. Please check the workflow logs for details and fix the issues.
-
-Common issues to check:
-- Formula syntax errors
-- Missing or incorrect dependencies  
-- Invalid version format or SHA256 hash
-- Style guide violations
-
-Once fixed, the validation will automatically run again.
-
-[View workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
+              body: "## ❌ PR Validation Failed\n\n" +
+                    "The Homebrew formula validation failed for this PR. Please check the workflow logs for details and fix the issues.\n\n" +
+                    "Common issues to check:\n" +
+                    "- Formula syntax errors\n" +
+                    "- Missing or incorrect dependencies\n" +
+                    "- Invalid version format or SHA256 hash\n" +
+                    "- Style guide violations\n\n" +
+                    "Once fixed, the validation will automatically run again.\n\n" +
+                    `[View workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
             });
