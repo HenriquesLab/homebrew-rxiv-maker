@@ -135,6 +135,29 @@ jobs:
           echo "Homebrew prefix: $(brew --prefix)"
           echo "Homebrew repository: $(brew --repository)"
           
+          # macOS-specific setup: ensure command line tools are available
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "Setting up macOS build environment..."
+            
+            # Check if Xcode command line tools are installed
+            if ! xcode-select -p >/dev/null 2>&1; then
+              echo "Installing Xcode command line tools..."
+              sudo xcode-select --install || echo "Command line tools installation started (may be already installed)"
+              
+              # Wait a bit for installation to start
+              sleep 5
+              
+              # Check again
+              xcode-select -p >/dev/null 2>&1 && echo "✓ Xcode command line tools available" || echo "⚠️ Command line tools may not be fully installed"
+            else
+              echo "✓ Xcode command line tools already installed"
+            fi
+            
+            # Ensure Python development headers are available
+            echo "Checking Python development environment..."
+            python3 -c "import distutils.util; print('✓ Python development tools available')" 2>/dev/null || echo "⚠️ Python development tools may be limited"
+          fi
+          
           # Verify we can access formula
           ls -la Formula/
           echo "✓ Homebrew environment configured"
@@ -189,13 +212,52 @@ jobs:
           # Record start time
           start_time=$(date +%s)
           
-          # Install with verbose output and timeout
-          timeout $INSTALL_TIMEOUT brew install --verbose henriqueslab/rxiv-maker/rxiv-maker || {
-            echo "❌ Installation failed or timed out"
-            echo "Checking brew logs..."
+          # Pre-installation checks and setup
+          echo "Pre-installation environment check:"
+          echo "Python version: $(python3 --version 2>/dev/null || echo 'not found')"
+          echo "Pip version: $(pip3 --version 2>/dev/null || echo 'not found')"
+          echo "Pipx version: $(pipx --version 2>/dev/null || echo 'not found')"
+          echo "Node version: $(node --version 2>/dev/null || echo 'not found')"
+          
+          # Install with verbose output and better error handling
+          echo "Starting rxiv-maker installation..."
+          if ! timeout $INSTALL_TIMEOUT brew install --verbose henriqueslab/rxiv-maker/rxiv-maker; then
+            echo "❌ Installation failed, gathering diagnostic information..."
+            
+            # Gather diagnostic information
+            echo "::group::Diagnostic Information"
+            echo "Homebrew config:"
             brew --config
+            
+            echo "Recent homebrew logs (last 50 lines):"
+            tail -50 "$(brew --repository)/Library/Homebrew/debug.log" 2>/dev/null || echo "No debug log found"
+            
+            echo "System information:"
+            uname -a
+            echo "Available disk space:"
+            df -h
+            echo "Memory usage:"
+            if command -v free >/dev/null 2>&1; then
+              free -h
+            else
+              vm_stat 2>/dev/null | head -10 || echo "Memory stats unavailable"
+            fi
+            
+            echo "Pipx environment:"
+            pipx --version || echo "Pipx not available"
+            pipx list || echo "No pipx packages installed"
+            
+            echo "Python environment:"
+            python3 -m pip list | head -10 || echo "Pip list failed"
+            
+            echo "::endgroup::"
+            
+            # Attempt to get more specific error information
+            echo "Attempting to run brew install with different options..."
+            brew install --verbose --debug henriqueslab/rxiv-maker/rxiv-maker || echo "Retry with debug failed"
+            
             exit 1
-          }
+          fi
           
           # Calculate installation time  
           end_time=$(date +%s)
