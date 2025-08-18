@@ -63,17 +63,11 @@ jobs:
           - os: macos-latest
             mode: standard
             homebrew-prefix: /opt/homebrew
-          - os: macos-12  
-            mode: standard
-            homebrew-prefix: /usr/local
             
           # Linux Testing  
           - os: ubuntu-latest
             mode: standard
             homebrew-prefix: /home/linuxbrew/.linuxbrew
-          - os: ubuntu-20.04
-            mode: standard
-            homebrew-prefix: /home/linuxbrew/.linuxbrew  
             
           # Fast mode for quick feedback
           - os: ubuntu-latest
@@ -433,6 +427,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Test Matrix Results:" >> $GITHUB_STEP_SUMMARY
           echo "- macOS (latest): ${{ contains(needs.validate-installation.result, 'success') && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- macOS (12): ${{ contains(needs.validate-installation.result, 'success') && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY  
           echo "- Ubuntu (latest): ${{ contains(needs.validate-installation.result, 'success') && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Ubuntu (20.04): ${{ contains(needs.validate-installation.result, 'success') && '✅' || '❌' }}" >> $GITHUB_STEP_SUMMARY
