@@ -63,27 +63,22 @@ jobs:
           - os: macos-latest
             mode: standard
             homebrew-prefix: /opt/homebrew
-            shell: bash
           - os: macos-12  
             mode: standard
             homebrew-prefix: /usr/local
-            shell: bash
             
           # Linux Testing  
           - os: ubuntu-latest
             mode: standard
             homebrew-prefix: /home/linuxbrew/.linuxbrew
-            shell: bash
           - os: ubuntu-20.04
             mode: standard
             homebrew-prefix: /home/linuxbrew/.linuxbrew  
-            shell: bash
             
           # Fast mode for quick feedback
           - os: ubuntu-latest
             mode: fast
             homebrew-prefix: /home/linuxbrew/.linuxbrew
-            shell: bash
 
     env:
       HOMEBREW_PREFIX: ${{ matrix.homebrew-prefix }}
@@ -96,7 +91,7 @@ jobs:
           fetch-depth: 0
 
       - name: 📊 System Information  
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::System Information"
           echo "OS: $(uname -s) $(uname -r)"
@@ -110,7 +105,7 @@ jobs:
 
       - name: 🍺 Setup Homebrew (Linux)
         if: runner.os == 'Linux'
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Installing Homebrew on Linux"
           if ! command -v brew &> /dev/null; then
@@ -130,7 +125,7 @@ jobs:
           echo "::endgroup::"
 
       - name: 🔧 Configure Homebrew Environment
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Homebrew Configuration"
           
@@ -152,7 +147,7 @@ jobs:
           echo "::endgroup::"
 
       - name: 🔗 Add rxiv-maker Tap
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Adding rxiv-maker Tap"
           
@@ -169,7 +164,7 @@ jobs:
           echo "::endgroup::"
 
       - name: 🧪 Validate Formula Syntax
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Formula Validation"
           
@@ -184,7 +179,7 @@ jobs:
 
       - name: ⚡ Fast Mode Tests
         if: matrix.mode == 'fast' || inputs.test_mode == 'fast'
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Fast Mode - Basic Validation Only"
           echo "✓ Fast mode validation completed (syntax check only)"
@@ -192,7 +187,7 @@ jobs:
 
       - name: 📦 Install rxiv-maker
         if: matrix.mode != 'fast' && inputs.test_mode != 'fast'
-        shell: ${{ matrix.shell }}
+        shell: bash
         timeout-minutes: 25
         run: |
           echo "::group::Installing rxiv-maker"
@@ -220,7 +215,7 @@ jobs:
 
       - name: 🔍 Verify CLI Installation
         if: matrix.mode != 'fast' && inputs.test_mode != 'fast'
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::CLI Verification"
           
@@ -243,7 +238,7 @@ jobs:
 
       - name: 🏥 Installation Health Check  
         if: matrix.mode != 'fast' && inputs.test_mode != 'fast'
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Installation Health Check"
           
@@ -259,7 +254,7 @@ jobs:
 
       - name: 📝 Create Test Manuscript
         if: matrix.mode != 'fast' && inputs.test_mode != 'fast'
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Creating Test Manuscript"
           
@@ -294,7 +289,7 @@ jobs:
 
       - name: 📄 Generate PDF
         if: matrix.mode != 'fast' && inputs.test_mode != 'fast' && inputs.skip_build != true
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::PDF Generation"
           
@@ -335,7 +330,7 @@ jobs:
 
       - name: 🧪 Test Additional Features
         if: matrix.mode == 'comprehensive' || inputs.test_mode == 'comprehensive'
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Testing Additional Features"
           
@@ -361,7 +356,7 @@ jobs:
 
       - name: 🎯 Performance Metrics
         if: always()
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Performance Metrics"
           
@@ -397,7 +392,7 @@ jobs:
 
       - name: 🧹 Cleanup
         if: always()
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           echo "::group::Cleanup"
           
