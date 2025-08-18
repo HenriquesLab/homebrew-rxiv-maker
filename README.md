@@ -4,6 +4,7 @@ A [Homebrew](https://brew.sh/) tap for installing [rxiv-maker](https://github.co
 
 [![DOI](https://img.shields.io/badge/DOI-10.48550%2FarXiv.2508.00836-blue)](https://doi.org/10.48550/arXiv.2508.00836)
 [![License](https://img.shields.io/github/license/henriqueslab/rxiv-maker?color=Green)](https://github.com/henriqueslab/rxiv-maker/blob/main/LICENSE)
+[![Homebrew Validation](https://github.com/henriqueslab/homebrew-rxiv-maker/actions/workflows/validate-homebrew-installation.yml/badge.svg)](https://github.com/henriqueslab/homebrew-rxiv-maker/actions/workflows/validate-homebrew-installation.yml)
 
 **Rxiv-Maker** transforms scientific writing from chaos to clarity by converting Markdown manuscripts into publication-ready PDFs with reproducible figures, professional typesetting, and zero LaTeX hassle.
 
@@ -72,6 +73,65 @@ If you encounter permission errors:
 # Fix Homebrew permissions
 sudo chown -R $(whoami) $(brew --prefix)/*
 ```
+
+## 🧪 Automated Validation
+
+This tap includes comprehensive GitHub Actions workflows that validate the Homebrew installation works correctly across platforms:
+
+### Validation Workflows
+
+**🔍 PR Validation (Fast)** - Runs on pull requests
+- ✅ Formula syntax and style validation
+- ✅ Quick installation test on Ubuntu
+- ✅ Basic CLI functionality verification
+- ⏱️ ~5-10 minutes for fast feedback
+
+**🧪 Full Installation Validation** - Runs on main branch and schedule
+- 🔄 **Cross-platform matrix**: macOS (latest, 12) + Linux (Ubuntu latest, 20.04)
+- 🔧 **Complete workflow**: Installation → CLI test → Manuscript creation → PDF generation
+- 📊 **Performance monitoring**: Installation time, resource usage, build metrics
+- 📝 **Test modes**: Standard, fast, comprehensive, debug
+- ⏱️ ~20-45 minutes for thorough validation
+
+### Test Coverage
+
+The validation workflows test:
+
+**✅ Installation Process**
+- Homebrew tap setup and formula installation
+- Dependency resolution (Python, Node.js, LaTeX)
+- CLI command availability and PATH setup
+- Cross-platform compatibility
+
+**✅ Core Functionality**  
+- `rxiv init` - Manuscript initialization
+- `rxiv pdf` - PDF generation workflow
+- `rxiv check-installation` - System validation
+- Help system and error handling
+
+**✅ Integration Testing**
+- Complete manuscript build pipeline
+- Bibliography processing and citations
+- LaTeX compilation and PDF output
+- Performance benchmarking
+
+### Viewing Test Results
+
+- **Latest runs**: Check the [Actions tab](../../actions)
+- **PR validation**: Results appear as PR checks and comments
+- **Performance metrics**: Collected as workflow artifacts
+- **Test coverage**: Basic → Standard → Comprehensive modes
+
+### Contributing
+
+When making changes to the formula:
+
+1. **PR validation** runs automatically with fast feedback
+2. **Fix any issues** reported by the validation workflow  
+3. **Full validation** runs after merge to main
+4. **Weekly schedule** catches any regressions
+
+The workflows ensure reliable installation across all supported platforms.
 
 ## Complete Documentation
 

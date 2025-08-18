@@ -1,0 +1,25 @@
+title: "Homebrew Test Manuscript"
+subtitle: "A Basic Test Document for rxiv-maker Validation"
+authors:
+  - name: "Test Author"
+    affiliations: [1]
+    email: "test@example.com"
+affiliations:
+  - id: 1
+    name: "Test Institution"
+    department: "Test Department"
+abstract: |
+  This is a basic test manuscript used for validating rxiv-maker Homebrew installation.
+  The manuscript contains minimal content to ensure the build system works correctly
+  without requiring complex dependencies or long processing times.
+keywords: ["test", "validation", "homebrew", "rxiv-maker"]
+journal: "Test Journal"
+doi: null
+acknowledgments: |
+  This manuscript was generated automatically for testing purposes.
+metadata:
+  template: "bioRxiv"
+  bibliography_style: "harvard"
+  word_count: true
+  line_numbers: false
+  acknowledge_rxiv_maker: true

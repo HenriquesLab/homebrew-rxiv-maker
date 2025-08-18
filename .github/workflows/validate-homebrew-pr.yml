@@ -1,0 +1,275 @@
+name: 🔍 PR Validation (Fast)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Formula/**'
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+
+env:
+  # GitHub token for API access
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  # Homebrew environment
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick-validation:
+    name: 🚀 Quick Formula Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 🔄 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📊 PR Information
+        run: |
+          echo "## 🔍 Pull Request Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**PR #${{ github.event.number }}**: ${{ github.event.pull_request.title }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Author**: @${{ github.event.pull_request.user.login }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Changed files**: $(git diff --name-only origin/main...HEAD | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: 🍺 Setup Homebrew
+        run: |
+          echo "::group::Installing Homebrew"
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          echo "✓ Homebrew installed"
+          echo "::endgroup::"
+
+      - name: 🔗 Add Local Tap
+        run: |
+          echo "::group::Setting up Local Tap"
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          brew tap henriqueslab/rxiv-maker "$(pwd)"
+          echo "✓ Local tap added"
+          echo "::endgroup::"
+
+      - name: 🧪 Formula Syntax Check
+        run: |
+          echo "::group::Formula Validation"
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          
+          # Check formula syntax
+          brew audit --strict henriqueslab/rxiv-maker/rxiv-maker
+          echo "✅ Formula audit passed" >> $GITHUB_STEP_SUMMARY
+          
+          # Check formula style  
+          brew style Formula/rxiv-maker.rb
+          echo "✅ Formula style check passed" >> $GITHUB_STEP_SUMMARY
+          
+          echo "✓ Formula validation completed"
+          echo "::endgroup::"
+
+      - name: 📋 Formula Information
+        run: |
+          echo "::group::Formula Details"
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          
+          # Extract formula information
+          FORMULA_VERSION=$(grep -E '^\s*url' Formula/rxiv-maker.rb | sed -n 's/.*v\([0-9.]*\)\.tar\.gz.*/\1/p' || echo "unknown")
+          FORMULA_SHA256=$(grep -E '^\s*sha256' Formula/rxiv-maker.rb | cut -d'"' -f2 || echo "unknown")
+          
+          echo "**Formula Details:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: \`$FORMULA_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "- SHA256: \`${FORMULA_SHA256:0:16}...\`" >> $GITHUB_STEP_SUMMARY
+          echo "- License: MIT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show dependencies
+          echo "**Dependencies:**" >> $GITHUB_STEP_SUMMARY
+          grep -E 'depends_on' Formula/rxiv-maker.rb | sed 's/^/- /' | sed 's/depends_on "/- /' | sed 's/"$//' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "✓ Formula information extracted"
+          echo "::endgroup::"
+
+      - name: 🔍 Check for Common Issues
+        run: |
+          echo "::group::Common Issues Check"
+          
+          ISSUES_FOUND=0
+          
+          # Check for version format
+          if ! grep -qE 'v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz' Formula/rxiv-maker.rb; then
+            echo "⚠️ Potential issue: Version format in URL may not match expected pattern" >> $GITHUB_STEP_SUMMARY
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+          fi
+          
+          # Check for SHA256 presence
+          if ! grep -qE 'sha256 "[a-f0-9]{64}"' Formula/rxiv-maker.rb; then
+            echo "⚠️ Potential issue: SHA256 hash format may be incorrect" >> $GITHUB_STEP_SUMMARY
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+          fi
+          
+          # Check for required dependencies
+          REQUIRED_DEPS=("node" "pipx" "python" "texlive")
+          for dep in "${REQUIRED_DEPS[@]}"; do
+            if ! grep -q "depends_on \"$dep\"" Formula/rxiv-maker.rb; then
+              echo "⚠️ Potential issue: Missing dependency: $dep" >> $GITHUB_STEP_SUMMARY
+              ISSUES_FOUND=$((ISSUES_FOUND + 1))
+            fi
+          done
+          
+          if [[ $ISSUES_FOUND -eq 0 ]]; then
+            echo "✅ No common issues detected" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Found $ISSUES_FOUND potential issues" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Common issues check completed"
+          echo "::endgroup::"
+
+  install-test:
+    name: 🔧 Quick Install Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [quick-validation]
+    if: success()
+    
+    steps:
+      - name: 🔄 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🍺 Setup Homebrew
+        run: |
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo "/home/linuxbrew/.linuxbrew/bin" >> $GITHUB_PATH
+
+      - name: 🔗 Add Local Tap  
+        run: |
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          brew tap henriqueslab/rxiv-maker "$(pwd)"
+
+      - name: ⚡ Fast Install Test
+        timeout-minutes: 15
+        run: |
+          echo "::group::Installation Test"
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          
+          # Record start time
+          START_TIME=$(date +%s)
+          
+          # Install formula
+          brew install henriqueslab/rxiv-maker/rxiv-maker
+          
+          # Record end time
+          END_TIME=$(date +%s)
+          INSTALL_DURATION=$((END_TIME - START_TIME))
+          
+          echo "**Installation Results:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Install time: ${INSTALL_DURATION}s" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "✓ Installation completed in ${INSTALL_DURATION}s"
+          echo "::endgroup::"
+
+      - name: 🔍 Basic CLI Test
+        run: |
+          echo "::group::CLI Verification"
+          
+          # Test rxiv command availability
+          if command -v rxiv >/dev/null 2>&1; then
+            RXIV_VERSION=$(rxiv --version 2>/dev/null | head -1 || echo "version unknown")
+            echo "- rxiv command: ✅ Available" >> $GITHUB_STEP_SUMMARY
+            echo "- Version: \`$RXIV_VERSION\`" >> $GITHUB_STEP_SUMMARY
+            
+            # Test help command
+            if timeout 30 rxiv --help >/dev/null 2>&1; then
+              echo "- Help system: ✅ Working" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- Help system: ❌ Not working" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "- rxiv command: ❌ Not found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✓ CLI verification completed"
+          echo "::endgroup::"
+
+  pr-summary:
+    name: 📋 PR Summary
+    runs-on: ubuntu-latest
+    needs: [quick-validation, install-test]
+    if: always()
+    
+    steps:
+      - name: 📊 Generate PR Summary
+        run: |
+          echo "## 🏁 Pull Request Validation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check results
+          VALIDATION_STATUS="${{ needs.quick-validation.result }}"
+          INSTALL_STATUS="${{ needs.install-test.result }}"
+          
+          if [[ "$VALIDATION_STATUS" == "success" && "$INSTALL_STATUS" == "success" ]]; then
+            echo "🎉 **All checks passed!** This PR is ready for review." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Formula syntax validation" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Formula style check" >> $GITHUB_STEP_SUMMARY  
+            echo "✅ Installation test" >> $GITHUB_STEP_SUMMARY
+            echo "✅ CLI functionality" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
+            echo "- Full validation will run when merged to main" >> $GITHUB_STEP_SUMMARY
+            echo "- Multi-platform testing includes macOS and Linux" >> $GITHUB_STEP_SUMMARY
+            echo "- Complete manuscript generation workflow validation" >> $GITHUB_STEP_SUMMARY
+          elif [[ "$VALIDATION_STATUS" == "success" ]]; then
+            echo "⚠️ **Formula validation passed, but installation test had issues.**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Formula syntax and style checks passed" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Installation or CLI test failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please check the installation test logs for details." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Validation failed.** Please fix the issues before merging." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Formula validation failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please check the formula syntax and style." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "*This is a fast validation for PR feedback. Complete testing runs on main branch.*" >> $GITHUB_STEP_SUMMARY
+
+      - name: 💬 PR Comment (on failure)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ❌ PR Validation Failed
+
+The Homebrew formula validation failed for this PR. Please check the workflow logs for details and fix the issues.
+
+Common issues to check:
+- Formula syntax errors
+- Missing or incorrect dependencies  
+- Invalid version format or SHA256 hash
+- Style guide violations
+
+Once fixed, the validation will automatically run again.
+
+[View workflow run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
+            });

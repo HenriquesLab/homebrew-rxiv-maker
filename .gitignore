@@ -50,3 +50,5 @@ language-configuration.json
 esbuild.js
 eslint.config.mjs
 CLAUDE.md
+output.md
+.folder2md_ignore
