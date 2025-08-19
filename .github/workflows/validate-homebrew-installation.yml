@@ -332,8 +332,8 @@ jobs:
         run: |
           echo "::group::Creating Test Manuscript"
           
-          # Create test directory
-          test_dir="homebrew-test-$(date +%s)"
+          # Create test directory with unique name but predictable prefix
+          test_dir="test-manuscript-${{ matrix.os }}-${{ matrix.mode }}"
           echo "Creating manuscript in: $test_dir"
           
           # Initialize manuscript (with timeout and error handling)
@@ -460,14 +460,42 @@ jobs:
           
           echo "::endgroup::"
 
+      - name: 📊 Prepare Test Artifacts
+        if: always() && matrix.mode != 'fast'
+        shell: bash
+        run: |
+          echo "::group::Preparing Artifacts"
+          
+          # Create artifacts directory
+          mkdir -p test-artifacts
+          
+          # Collect test logs
+          if [[ -n "${TEST_DIR:-}" && -d "${TEST_DIR}" ]]; then
+            echo "Collecting logs from test directory: $TEST_DIR"
+            cp -r "$TEST_DIR" test-artifacts/ 2>/dev/null || echo "No test directory to collect"
+          fi
+          
+          # Collect any standalone log files
+          find . -maxdepth 1 -name "*.log" -exec cp {} test-artifacts/ \; 2>/dev/null || true
+          
+          # Create a summary file
+          echo "Test run summary for ${{ matrix.os }} (${{ matrix.mode }})" > test-artifacts/summary.txt
+          echo "Date: $(date)" >> test-artifacts/summary.txt
+          echo "OS: ${{ matrix.os }}" >> test-artifacts/summary.txt
+          echo "Mode: ${{ matrix.mode }}" >> test-artifacts/summary.txt
+          
+          # List what we collected
+          echo "Collected artifacts:"
+          find test-artifacts -type f 2>/dev/null || echo "No artifacts collected"
+          
+          echo "::endgroup::"
+
       - name: 📊 Collect Artifacts
         if: always() && matrix.mode != 'fast'
         uses: actions/upload-artifact@v4
         with:
           name: test-outputs-${{ matrix.os }}-${{ matrix.mode }}
-          path: |
-            homebrew-test-*/
-            *.log
+          path: test-artifacts/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -481,6 +509,12 @@ jobs:
           if [[ -n "${TEST_DIR:-}" && -d "$TEST_DIR" ]]; then
             rm -rf "$TEST_DIR"
             echo "✓ Cleaned up test manuscript"
+          fi
+          
+          # Remove artifacts directory
+          if [[ -d "test-artifacts" ]]; then
+            rm -rf test-artifacts
+            echo "✓ Cleaned up artifacts directory"
           fi
           
           # Optionally uninstall formula (keep for debugging)
