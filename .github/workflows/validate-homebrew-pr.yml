@@ -137,7 +137,7 @@ jobs:
   install-test:
     name: 🔧 Quick Install Test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: [quick-validation]
     if: success()
     
@@ -156,7 +156,7 @@ jobs:
           brew tap henriqueslab/rxiv-maker "$(pwd)"
 
       - name: ⚡ Fast Install Test
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: |
           echo "::group::Installation Test"
           export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"

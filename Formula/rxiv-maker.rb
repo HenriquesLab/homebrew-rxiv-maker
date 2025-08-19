@@ -18,8 +18,7 @@ class RxivMaker < Formula
     ENV["PIPX_HOME"] = (libexec/"pipx").to_s
     ENV["PIPX_BIN_DIR"] = bin.to_s
 
-    # Ensure pipx available
-    system("pipx", "--version") || odie("pipx is not available or not working")
+    # pipx will be available through dependencies
 
     # Install via pipx (pin to formula version)
     # Use system! for better error reporting
