@@ -19,14 +19,14 @@ class RxivMaker < Formula
     ENV["PIPX_BIN_DIR"] = bin.to_s
 
     # Ensure pipx available
-    system "pipx", "--version" || odie("pipx is not available or not working")
+    system("pipx", "--version") || odie("pipx is not available or not working")
 
     # Install via pipx (pin to formula version)
-    system("pipx", "install", "rxiv-maker==#{version}", "--pip-args=--no-cache-dir") ||
-      odie("Failed to install rxiv-maker via pipx")
+    # Use system! for better error reporting
+    system!("pipx", "install", "rxiv-maker==#{version}", "--pip-args=--no-cache-dir")
 
     # Verify CLI present
-    system bin/"rxiv", "--version" || odie("rxiv CLI not available after installation")
+    system!("#{bin}/rxiv", "--version")
   end
 
   def caveats
@@ -61,7 +61,10 @@ class RxivMaker < Formula
   end
 
   test do
-    # Minimal test to satisfy audit without invoking heavy runtime
-    system "echo", "rxiv-maker"
+    # Test that rxiv command is available and working
+    assert_match "rxiv-maker", shell_output("#{bin}/rxiv --version")
+
+    # Test basic command structure (should not fail)
+    system "#{bin}/rxiv", "--help"
   end
 end
