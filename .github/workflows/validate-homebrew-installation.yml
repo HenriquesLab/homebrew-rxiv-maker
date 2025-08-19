@@ -40,8 +40,8 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: 1
   HOMEBREW_NO_INSTALL_CLEANUP: 1
   
-  # Test timeouts (seconds)
-  INSTALL_TIMEOUT: 1200
+  # Test timeouts (seconds) - Increased for texlive installation
+  INSTALL_TIMEOUT: 1800
   BUILD_TIMEOUT: 600
   TEST_TIMEOUT: 300
 
@@ -53,7 +53,7 @@ jobs:
   validate-installation:
     name: 🧪 Test ${{ matrix.os }} (${{ matrix.mode }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     
     strategy:
       fail-fast: false
@@ -213,7 +213,7 @@ jobs:
       - name: 📦 Install rxiv-maker
         if: matrix.mode != 'fast' && inputs.test_mode != 'fast'
         shell: bash
-        timeout-minutes: 25
+        timeout-minutes: 35
         run: |
           echo "::group::Installing rxiv-maker"
           
