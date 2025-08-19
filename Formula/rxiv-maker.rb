@@ -1,8 +1,8 @@
 class RxivMaker < Formula
   desc "Automated LaTeX article generation with modern CLI and figure creation"
   homepage "https://github.com/HenriquesLab/rxiv-maker"
-  url "https://github.com/HenriquesLab/rxiv-maker/archive/refs/tags/v1.5.20.tar.gz"
-  sha256 "174d34ae0b1c2403a58de270b66965ea44a664c5b717ea294e21e93059720f04"
+  url "https://github.com/HenriquesLab/rxiv-maker/archive/refs/tags/v1.5.22.tar.gz"
+  sha256 "ef08e1a67a563e6a10d8326125e3f7cfca412bdee5a263d5ac2c739243e30799"
   license "MIT"
 
   depends_on "node"
@@ -18,15 +18,14 @@ class RxivMaker < Formula
     ENV["PIPX_HOME"] = (libexec/"pipx").to_s
     ENV["PIPX_BIN_DIR"] = bin.to_s
 
-    # Ensure pipx available
-    system "pipx", "--version" || odie("pipx is not available or not working")
+    # pipx will be available through dependencies
 
     # Install via pipx (pin to formula version)
-    system("pipx", "install", "rxiv-maker==#{version}", "--pip-args=--no-cache-dir") ||
-      odie("Failed to install rxiv-maker via pipx")
+    # Use system! for better error reporting
+    system!("pipx", "install", "rxiv-maker==#{version}", "--pip-args=--no-cache-dir")
 
     # Verify CLI present
-    system bin/"rxiv", "--version" || odie("rxiv CLI not available after installation")
+    system!("#{bin}/rxiv", "--version")
   end
 
   def caveats
@@ -61,7 +60,10 @@ class RxivMaker < Formula
   end
 
   test do
-    # Minimal test to satisfy audit without invoking heavy runtime
-    system "echo", "rxiv-maker"
+    # Test that rxiv command is available and working
+    assert_match "rxiv-maker", shell_output("#{bin}/rxiv --version")
+
+    # Test basic command structure (should not fail)
+    system "#{bin}/rxiv", "--help"
   end
 end
