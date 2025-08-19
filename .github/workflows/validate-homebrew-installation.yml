@@ -127,8 +127,16 @@ jobs:
           export PATH="${{ matrix.homebrew-prefix }}/bin:$PATH"
           echo "${{ matrix.homebrew-prefix }}/bin" >> $GITHUB_PATH
           
-          # Update Homebrew (with timeout)
-          timeout 300 brew update || echo "Warning: brew update timed out"
+          # Update Homebrew (with platform-specific timeout)
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 300 brew update || echo "Warning: brew update timed out"
+          elif command -v gtimeout >/dev/null 2>&1; then
+            gtimeout 300 brew update || echo "Warning: brew update timed out"
+          else
+            # No timeout available - run directly with risk of hanging
+            echo "No timeout command available, running brew update directly..."
+            brew update || echo "Warning: brew update failed"
+          fi
           
           # Show Homebrew status
           echo "Homebrew version: $(brew --version | head -1)"
@@ -219,10 +227,22 @@ jobs:
           echo "Pipx version: $(pipx --version 2>/dev/null || echo 'not found')"
           echo "Node version: $(node --version 2>/dev/null || echo 'not found')"
           
-          # Install with verbose output and better error handling
+          # Install with verbose output and platform-specific timeout
           echo "Starting rxiv-maker installation..."
-          if ! timeout $INSTALL_TIMEOUT brew install --verbose henriqueslab/rxiv-maker/rxiv-maker; then
-            echo "❌ Installation failed, gathering diagnostic information..."
+          install_cmd="brew install --verbose henriqueslab/rxiv-maker/rxiv-maker"
+          if command -v timeout >/dev/null 2>&1; then
+            timeout $INSTALL_TIMEOUT $install_cmd
+          elif command -v gtimeout >/dev/null 2>&1; then
+            gtimeout $INSTALL_TIMEOUT $install_cmd
+          else
+            # No timeout available - run directly
+            echo "No timeout command available, running brew install directly..."
+            $install_cmd
+          fi
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Installation failed or timed out"
+            echo "Gathering diagnostic information..."
             
             # Gather diagnostic information
             echo "::group::Diagnostic Information"
@@ -284,19 +304,47 @@ jobs:
             exit 1
           fi
           
-          # Test basic commands with timeout and better error handling
+          # Test basic commands with platform-specific timeout
           echo "Testing rxiv --version..."
-          if timeout $TEST_TIMEOUT rxiv --version; then
-            echo "✓ rxiv --version works"
+          if command -v timeout >/dev/null 2>&1; then
+            if timeout $TEST_TIMEOUT rxiv --version; then
+              echo "✓ rxiv --version works"
+            else
+              echo "⚠️ rxiv --version failed, but continuing..."
+            fi
+          elif command -v gtimeout >/dev/null 2>&1; then
+            if gtimeout $TEST_TIMEOUT rxiv --version; then
+              echo "✓ rxiv --version works"
+            else
+              echo "⚠️ rxiv --version failed, but continuing..."
+            fi
           else
-            echo "⚠️ rxiv --version failed, but continuing..."
+            if rxiv --version; then
+              echo "✓ rxiv --version works"
+            else
+              echo "⚠️ rxiv --version failed, but continuing..."
+            fi
           fi
           
           echo "Testing rxiv --help..."
-          if timeout $TEST_TIMEOUT rxiv --help | head -10; then
-            echo "✓ rxiv --help works"
+          if command -v timeout >/dev/null 2>&1; then
+            if timeout $TEST_TIMEOUT rxiv --help | head -10; then
+              echo "✓ rxiv --help works"
+            else
+              echo "⚠️ rxiv --help failed, but continuing..."
+            fi
+          elif command -v gtimeout >/dev/null 2>&1; then
+            if gtimeout $TEST_TIMEOUT rxiv --help | head -10; then
+              echo "✓ rxiv --help works"
+            else
+              echo "⚠️ rxiv --help failed, but continuing..."
+            fi
           else
-            echo "⚠️ rxiv --help failed, but continuing..."
+            if rxiv --help | head -10; then
+              echo "✓ rxiv --help works"
+            else
+              echo "⚠️ rxiv --help failed, but continuing..."
+            fi
           fi
           
           echo "✓ CLI verification completed"
@@ -310,17 +358,30 @@ jobs:
           echo "::group::Installation Health Check"
           
           # Run installation check (may take time to install missing deps)
-          echo "Running basic installation check..."
-          if timeout $TEST_TIMEOUT rxiv check-installation; then
-            echo "✓ Basic installation check passed"
+          echo "Running comprehensive installation check..."
+          check_cmd="rxiv check-installation --detailed"
+          if command -v timeout >/dev/null 2>&1; then
+            if timeout $TEST_TIMEOUT $check_cmd; then
+              echo "✓ Installation check passed"
+            else
+              echo "⚠️ Installation check failed - this might be expected in CI"
+              echo "This is common in CI environments without LaTeX"
+            fi
+          elif command -v gtimeout >/dev/null 2>&1; then
+            if gtimeout $TEST_TIMEOUT $check_cmd; then
+              echo "✓ Installation check passed"
+            else
+              echo "⚠️ Installation check failed - this might be expected in CI"
+              echo "This is common in CI environments without LaTeX"
+            fi
           else
-            echo "⚠️ Installation check failed - this might be expected in CI"
-            echo "This is common in CI environments without LaTeX"
+            if $check_cmd; then
+              echo "✓ Installation check passed"
+            else
+              echo "⚠️ Installation check failed - this might be expected in CI"
+              echo "This is common in CI environments without LaTeX"
+            fi
           fi
-          
-          # Try detailed check but don't fail if it doesn't work
-          echo "Attempting detailed check (may fail in CI)..."
-          timeout $TEST_TIMEOUT rxiv check-installation --detailed 2>/dev/null || echo "⚠️ Detailed check not available (expected in CI)"
           
           echo "✓ Health check completed"
           echo "::endgroup::"
@@ -336,10 +397,28 @@ jobs:
           test_dir="test-manuscript-${{ matrix.os }}-${{ matrix.mode }}"
           echo "Creating manuscript in: $test_dir"
           
-          # Initialize manuscript (with timeout and error handling)
-          if timeout $TEST_TIMEOUT rxiv init "$test_dir" 2>/dev/null; then
-            echo "✓ rxiv init succeeded"
+          # Initialize manuscript (with platform-specific timeout and error handling)
+          init_cmd="rxiv init \"$test_dir\""
+          init_success=false
+          
+          if command -v timeout >/dev/null 2>&1; then
+            if timeout $TEST_TIMEOUT $init_cmd 2>/dev/null; then
+              echo "✓ rxiv init succeeded"
+              init_success=true
+            fi
+          elif command -v gtimeout >/dev/null 2>&1; then
+            if gtimeout $TEST_TIMEOUT $init_cmd 2>/dev/null; then
+              echo "✓ rxiv init succeeded"
+              init_success=true
+            fi
           else
+            if eval $init_cmd 2>/dev/null; then
+              echo "✓ rxiv init succeeded"
+              init_success=true
+            fi
+          fi
+          
+          if [ "$init_success" = false ]; then
             echo "⚠️ rxiv init failed, creating manual test manuscript..."
             mkdir -p "$test_dir"
             echo "# Test Manuscript" > "$test_dir/01_MAIN.md"
@@ -380,9 +459,26 @@ jobs:
           # Record start time
           start_time=$(date +%s)
           
-          # Attempt PDF generation with timeout
+          # Attempt PDF generation with platform-specific timeout
           echo "Generating PDF for manuscript: $TEST_DIR"
-          if timeout $BUILD_TIMEOUT rxiv pdf "$TEST_DIR" 2>&1; then
+          pdf_cmd="rxiv pdf \"$TEST_DIR\""
+          pdf_success=false
+          
+          if command -v timeout >/dev/null 2>&1; then
+            if timeout $BUILD_TIMEOUT $pdf_cmd 2>&1; then
+              pdf_success=true
+            fi
+          elif command -v gtimeout >/dev/null 2>&1; then
+            if gtimeout $BUILD_TIMEOUT $pdf_cmd 2>&1; then
+              pdf_success=true
+            fi
+          else
+            if eval $pdf_cmd 2>&1; then
+              pdf_success=true
+            fi
+          fi
+          
+          if [ "$pdf_success" = true ]; then
             echo "✓ PDF generation command completed"
             
             # Calculate build time
@@ -418,15 +514,36 @@ jobs:
           if [[ -n "${TEST_DIR:-}" && -d "$TEST_DIR" ]]; then
             # Test validation
             echo "Testing manuscript validation..."
-            timeout $TEST_TIMEOUT rxiv validate "$TEST_DIR" 2>/dev/null || echo "⚠️ Validation not available (expected in CI)"
+            val_cmd="rxiv validate \"$TEST_DIR\""
+            if command -v timeout >/dev/null 2>&1; then
+              timeout $TEST_TIMEOUT $val_cmd 2>/dev/null || echo "⚠️ Validation not available (expected in CI)"
+            elif command -v gtimeout >/dev/null 2>&1; then
+              gtimeout $TEST_TIMEOUT $val_cmd 2>/dev/null || echo "⚠️ Validation not available (expected in CI)"
+            else
+              eval $val_cmd 2>/dev/null || echo "⚠️ Validation not available (expected in CI)"
+            fi
             
             # Test bibliography commands
             echo "Testing bibliography features..."
-            timeout $TEST_TIMEOUT rxiv bibliography --help 2>/dev/null || echo "⚠️ Bibliography help not available"
+            bib_cmd="rxiv bibliography --help"
+            if command -v timeout >/dev/null 2>&1; then
+              timeout $TEST_TIMEOUT $bib_cmd 2>/dev/null || echo "⚠️ Bibliography help not available"
+            elif command -v gtimeout >/dev/null 2>&1; then
+              gtimeout $TEST_TIMEOUT $bib_cmd 2>/dev/null || echo "⚠️ Bibliography help not available"
+            else
+              $bib_cmd 2>/dev/null || echo "⚠️ Bibliography help not available"
+            fi
             
             # Test figure commands  
             echo "Testing figure commands..."
-            timeout $TEST_TIMEOUT rxiv figures --help 2>/dev/null || echo "⚠️ Figures help not available"
+            fig_cmd="rxiv figures --help"
+            if command -v timeout >/dev/null 2>&1; then
+              timeout $TEST_TIMEOUT $fig_cmd 2>/dev/null || echo "⚠️ Figures help not available"
+            elif command -v gtimeout >/dev/null 2>&1; then
+              gtimeout $TEST_TIMEOUT $fig_cmd 2>/dev/null || echo "⚠️ Figures help not available"
+            else
+              $fig_cmd 2>/dev/null || echo "⚠️ Figures help not available"
+            fi
             
             echo "✓ Additional features tested"
           else
