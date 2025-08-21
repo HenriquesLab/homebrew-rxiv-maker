@@ -1,8 +1,8 @@
 class RxivMaker < Formula
   desc "Automated LaTeX article generation with modern CLI and figure creation"
   homepage "https://github.com/HenriquesLab/rxiv-maker"
-  url "https://github.com/HenriquesLab/rxiv-maker/archive/refs/tags/v1.5.20.tar.gz"
-  sha256 "174d34ae0b1c2403a58de270b66965ea44a664c5b717ea294e21e93059720f04"
+  url "https://github.com/HenriquesLab/rxiv-maker/archive/refs/tags/v1.5.23.tar.gz"
+  sha256 "b94fd6ea51af8453777da363dba24887c83b8be37bd8b4df24337ba2e92d7963"
   license "MIT"
 
   depends_on "node"
