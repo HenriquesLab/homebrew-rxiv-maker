@@ -21,11 +21,12 @@ class RxivMaker < Formula
     # pipx will be available through dependencies
 
     # Install via pipx (pin to formula version)
-    # Use system! for better error reporting
-    system!("pipx", "install", "rxiv-maker==#{version}", "--pip-args=--no-cache-dir")
+    system("pipx", "install", "rxiv-maker==#{version}", "--pip-args=--no-cache-dir") ||
+      odie("Failed to install rxiv-maker via pipx")
 
     # Verify CLI present
-    system!("#{bin}/rxiv", "--version")
+    system("#{bin}/rxiv", "--version") ||
+      odie("rxiv command not available after installation")
   end
 
   def caveats
