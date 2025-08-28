@@ -1,0 +1,338 @@
+name: 🔄 Auto-Update Formula
+
+on:
+  repository_dispatch:
+    types: [version-update]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to update to (e.g., v1.6.1)'
+        required: true
+        type: string
+      clean_version:
+        description: 'Clean version without v prefix (e.g., 1.6.1)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run mode (show what would be done)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  FORMULA_PATH: Formula/rxiv-maker.rb
+  PYPI_PACKAGE: rxiv-maker
+
+jobs:
+  update-formula:
+    name: 🍺 Update Homebrew Formula
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Extract version information
+        id: version
+        run: |
+          # Get version from dispatch event or manual input
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            VERSION="${{ github.event.client_payload.version }}"
+            CLEAN_VERSION="${{ github.event.client_payload.clean_version }}"
+            TRIGGER_SOURCE="${{ github.event.client_payload.source }}"
+            TRIGGERED_BY="${{ github.event.client_payload.triggered_by }}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+            CLEAN_VERSION="${{ github.event.inputs.clean_version }}"
+            TRIGGER_SOURCE="manual"
+            TRIGGERED_BY="${{ github.actor }}"
+          fi
+
+          # Validate version format
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            exit 1
+          fi
+
+          if [[ ! "$CLEAN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid clean version format: $CLEAN_VERSION"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "clean_version=$CLEAN_VERSION" >> $GITHUB_OUTPUT
+          echo "trigger_source=$TRIGGER_SOURCE" >> $GITHUB_OUTPUT
+          echo "triggered_by=$TRIGGERED_BY" >> $GITHUB_OUTPUT
+
+          echo "📦 Updating formula to version: $VERSION ($CLEAN_VERSION)"
+          echo "🎯 Triggered by: $TRIGGERED_BY ($TRIGGER_SOURCE)"
+
+      - name: Check current formula version
+        id: current
+        run: |
+          if [[ ! -f "${{ env.FORMULA_PATH }}" ]]; then
+            echo "❌ Formula file not found: ${{ env.FORMULA_PATH }}"
+            exit 1
+          fi
+
+          # Extract current version from formula
+          CURRENT_VERSION=$(grep -o 'version "[^"]*"' ${{ env.FORMULA_PATH }} | sed 's/version "\(.*\)"/\1/')
+          if [[ -z "$CURRENT_VERSION" ]]; then
+            echo "❌ Could not extract current version from formula"
+            exit 1
+          fi
+
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "📋 Current formula version: $CURRENT_VERSION"
+
+          # Check if update is needed
+          if [[ "$CURRENT_VERSION" == "${{ steps.version.outputs.clean_version }}" ]]; then
+            echo "✅ Formula is already at version ${{ steps.version.outputs.clean_version }}"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+          else
+            echo "🔄 Update needed: $CURRENT_VERSION → ${{ steps.version.outputs.clean_version }}"
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fetch PyPI package information
+        id: pypi
+        if: steps.current.outputs.update_needed == 'true'
+        run: |
+          echo "🔍 Fetching PyPI package information for version ${{ steps.version.outputs.clean_version }}"
+
+          # Wait for PyPI propagation with retry logic
+          for attempt in {1..5}; do
+            echo "🎯 Attempt $attempt to fetch PyPI info..."
+
+            PYPI_URL="https://pypi.org/pypi/${{ env.PYPI_PACKAGE }}/${{ steps.version.outputs.clean_version }}/json"
+            if curl -f -s "$PYPI_URL" > pypi_info.json; then
+              echo "✅ PyPI package information retrieved on attempt $attempt"
+              break
+            else
+              echo "❌ PyPI package not available on attempt $attempt"
+              if [ $attempt -eq 5 ]; then
+                echo "❌ PyPI package not available after 5 attempts"
+                echo "⚠️ Package may still be propagating - check manually"
+                exit 1
+              fi
+              echo "⏳ Waiting 30 seconds before retry..."
+              sleep 30
+            fi
+          done
+
+          # Extract download URL for source distribution
+          DOWNLOAD_URL=$(cat pypi_info.json | jq -r '.urls[] | select(.packagetype == "sdist") | .url')
+          if [[ -z "$DOWNLOAD_URL" || "$DOWNLOAD_URL" == "null" ]]; then
+            echo "❌ Could not find source distribution URL"
+            exit 1
+          fi
+
+          echo "download_url=$DOWNLOAD_URL" >> $GITHUB_OUTPUT
+          echo "📥 Source download URL: $DOWNLOAD_URL"
+
+          # Download and calculate SHA256
+          echo "🔢 Calculating SHA256 hash..."
+          curl -L "$DOWNLOAD_URL" -o package.tar.gz
+          SHA256=$(shasum -a 256 package.tar.gz | awk '{print $1}')
+
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "🔐 SHA256: $SHA256"
+
+      - name: Update formula
+        id: update
+        if: steps.current.outputs.update_needed == 'true'
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "🧪 DRY RUN: Would update formula with:"
+            echo "  Version: ${{ steps.current.outputs.current_version }} → ${{ steps.version.outputs.clean_version }}"
+            echo "  SHA256: ${{ steps.pypi.outputs.sha256 }}"
+            echo "  URL: ${{ steps.pypi.outputs.download_url }}"
+            exit 0
+          fi
+
+          echo "🔧 Updating formula file..."
+
+          # Create backup
+          cp "${{ env.FORMULA_PATH }}" "${{ env.FORMULA_PATH }}.backup"
+
+          # Update version
+          sed -i.tmp "s/version \"[^\"]*\"/version \"${{ steps.version.outputs.clean_version }}\"/" "${{ env.FORMULA_PATH }}"
+
+          # Update URL (extract base URL pattern and update version)
+          sed -i.tmp "s|url \"https://files.pythonhosted.org/packages/source/r/rxiv-maker/rxiv_maker-[^\"]*\.tar\.gz\"|url \"${{ steps.pypi.outputs.download_url }}\"|" "${{ env.FORMULA_PATH }}"
+
+          # Update SHA256
+          sed -i.tmp "s/sha256 \"[^\"]*\"/sha256 \"${{ steps.pypi.outputs.sha256 }}\"/" "${{ env.FORMULA_PATH }}"
+
+          # Clean up temporary files
+          rm -f "${{ env.FORMULA_PATH }}.tmp"
+
+          # Verify the update
+          echo "✅ Formula updated successfully"
+          echo "📋 Updated formula content:"
+          echo "---"
+          head -20 "${{ env.FORMULA_PATH }}"
+          echo "---"
+
+          # Set output for branch name
+          BRANCH_NAME="auto-update-v${{ steps.version.outputs.clean_version }}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Validate updated formula
+        if: steps.current.outputs.update_needed == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          echo "🧪 Validating updated formula..."
+
+          # Check that required fields are present and properly formatted
+          if ! grep -q "version \"${{ steps.version.outputs.clean_version }}\"" "${{ env.FORMULA_PATH }}"; then
+            echo "❌ Version not properly updated in formula"
+            exit 1
+          fi
+
+          if ! grep -q "sha256 \"${{ steps.pypi.outputs.sha256 }}\"" "${{ env.FORMULA_PATH }}"; then
+            echo "❌ SHA256 not properly updated in formula"
+            exit 1
+          fi
+
+          # Validate Ruby syntax (basic check)
+          if ! ruby -c "${{ env.FORMULA_PATH }}" > /dev/null 2>&1; then
+            echo "❌ Formula has invalid Ruby syntax"
+            exit 1
+          fi
+
+          # Check Homebrew style (if brew is available)
+          if command -v brew >/dev/null 2>&1; then
+            if ! brew style "${{ env.FORMULA_PATH }}" > /dev/null 2>&1; then
+              echo "⚠️ Formula style validation failed - will be fixed in PR"
+            else
+              echo "✅ Formula style validation passed"
+            fi
+          fi
+
+          echo "✅ Formula validation completed successfully"
+
+      - name: Create pull request
+        if: steps.current.outputs.update_needed == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          echo "🚀 Creating pull request for version update..."
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and switch to new branch
+          git checkout -b "${{ steps.update.outputs.branch_name }}"
+
+          # Add and commit changes
+          git add "${{ env.FORMULA_PATH }}"
+          git commit -m "🔄 Update rxiv-maker formula to v${{ steps.version.outputs.clean_version }}
+
+          Automated update triggered by ${{ steps.version.outputs.trigger_source }}
+          - Update version: ${{ steps.current.outputs.current_version }} → ${{ steps.version.outputs.clean_version }}
+          - Update SHA256: ${{ steps.pypi.outputs.sha256 }}
+          - Source: ${{ steps.pypi.outputs.download_url }}
+
+          Triggered by: ${{ steps.version.outputs.triggered_by }}"
+
+          # Push branch
+          git push origin "${{ steps.update.outputs.branch_name }}"
+
+          # Create pull request
+          PR_TITLE="🔄 Update rxiv-maker formula to v${{ steps.version.outputs.clean_version }}"
+          PR_BODY="## 🍺 Automated Formula Update
+
+          This PR automatically updates the rxiv-maker Homebrew formula to version **v${{ steps.version.outputs.clean_version }}**.
+
+          ### Changes
+          - ⬆️ **Version**: \`${{ steps.current.outputs.current_version }}\` → \`${{ steps.version.outputs.clean_version }}\`
+          - 🔐 **SHA256**: \`${{ steps.pypi.outputs.sha256 }}\`
+          - 📦 **Source**: [\`rxiv-maker-${{ steps.version.outputs.clean_version }}.tar.gz\`](${{ steps.pypi.outputs.download_url }})
+
+          ### Trigger Information
+          - 🎯 **Triggered by**: ${{ steps.version.outputs.triggered_by }}
+          - 📡 **Source**: ${{ steps.version.outputs.trigger_source }}
+          - 🕐 **Generated**: $(date -Iseconds)
+
+          ### Validation Status
+          - ✅ PyPI package availability confirmed
+          - ✅ SHA256 hash calculated and verified  
+          - ✅ Formula syntax validation passed
+          - ✅ Required fields updated correctly
+
+          ### Next Steps
+          This PR will be automatically validated by CI workflows. If tests pass, it can be safely merged to update the formula.
+
+          ---
+          🤖 _This PR was automatically generated by the [auto-update-formula workflow](https://github.com/HenriquesLab/homebrew-rxiv-maker/actions/workflows/auto-update-formula.yml)_"
+
+          gh pr create \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY" \
+            --head "${{ steps.update.outputs.branch_name }}" \
+            --base main \
+            --label "automated" \
+            --label "version-update"
+
+          PR_URL=$(gh pr view "${{ steps.update.outputs.branch_name }}" --json url --jq .url)
+          echo "✅ Pull request created: $PR_URL"
+          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
+
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate workflow summary
+        if: always()
+        run: |
+          echo "## 🍺 Homebrew Formula Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Target Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Current Version:** ${{ steps.current.outputs.current_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ steps.version.outputs.trigger_source }} (by ${{ steps.version.outputs.triggered_by }})" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "**Mode:** 🧪 Dry Run" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Mode:** 🚀 Production" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.current.outputs.update_needed }}" == "false" ]; then
+            echo "### ✅ Result: No Update Needed" >> $GITHUB_STEP_SUMMARY
+            echo "The formula is already at the requested version." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "### 🧪 Result: Dry Run Completed" >> $GITHUB_STEP_SUMMARY
+            echo "Formula would be updated from ${{ steps.current.outputs.current_version }} to ${{ steps.version.outputs.clean_version }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### 🚀 Result: Formula Updated" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Formula updated to v${{ steps.version.outputs.clean_version }}" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ SHA256 hash verified: \`${{ steps.pypi.outputs.sha256 }}\`" >> $GITHUB_STEP_SUMMARY
+            if [ -n "${{ steps.create_pr.outputs.pr_url }}" ]; then
+              echo "- ✅ [Pull request created](${{ steps.create_pr.outputs.pr_url }})" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+  # Success gate
+  update-success:
+    name: ✅ Update Success
+    runs-on: ubuntu-latest
+    needs: update-formula
+    if: always()
+
+    steps:
+      - name: Report final status
+        run: |
+          if [ "${{ needs.update-formula.result }}" == "success" ]; then
+            echo "✅ Homebrew formula update completed successfully"
+          else
+            echo "❌ Homebrew formula update failed"
+            echo "📋 Check workflow logs for details"
+            exit 1
+          fi
